@@ -1,37 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 90" width="320" height="90">
+<svg viewBox="0 0 320 90" xmlns="http://www.w3.org/2000/svg" style="background:transparent">
   <defs>
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#C9A84C;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#E8C97A;stop-opacity:1" />
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a3a6e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0F1B3D;stop-opacity:1" />
     </linearGradient>
   </defs>
 
-  <!-- Icon: Abstract geometric symbol (overlapping diamond/rhombus shapes) -->
-  <g transform="translate(18, 45)">
-    <!-- Outer diamond outline -->
-    <polygon points="32,0 58,22 32,44 6,22" fill="none" stroke="#0F1B3D" stroke-width="2.2"/>
-    <!-- Inner diamond filled -->
-    <polygon points="32,10 48,22 32,34 16,22" fill="none" stroke="url(#goldGrad)" stroke-width="1.6"/>
-    <!-- Center accent dot -->
-    <circle cx="32" cy="22" r="3.2" fill="url(#goldGrad)"/>
-    <!-- Left vertical line accent -->
-    <line x1="6" y1="22" x2="16" y2="22" stroke="#0F1B3D" stroke-width="1.4" opacity="0.4"/>
-    <!-- Right vertical line accent -->
-    <line x1="48" y1="22" x2="58" y2="22" stroke="#0F1B3D" stroke-width="1.4" opacity="0.4"/>
+  <!-- Icon: perfectly symmetric diamond with inner structure -->
+  <g transform="translate(45,45)">
+    <!-- Outer diamond -->
+    <polygon points="0,-32 27.7,0 0,32 -27.7,0" fill="none" stroke="#0F1B3D" stroke-width="2.8"/>
+    <!-- Inner diamond -->
+    <polygon points="0,-18 15.6,0 0,18 -15.6,0" fill="#0F1B3D"/>
+    <!-- Top triangle accent -->
+    <polygon points="0,-32 27.7,0 0,-18 -27.7,0" fill="url(#grad1)" opacity="0.18"/>
+    <!-- Center cross lines for symmetry -->
+    <line x1="-27.7" y1="0" x2="-15.6" y2="0" stroke="#0F1B3D" stroke-width="2.8"/>
+    <line x1="15.6" y1="0" x2="27.7" y2="0" stroke="#0F1B3D" stroke-width="2.8"/>
+    <line x1="0" y1="-32" x2="0" y2="-18" stroke="#0F1B3D" stroke-width="2.8"/>
+    <line x1="0" y1="18" x2="0" y2="32" stroke="#0F1B3D" stroke-width="2.8"/>
   </g>
 
+  <!-- Vertical divider -->
+  <line x1="92" y1="18" x2="92" y2="72" stroke="#0F1B3D" stroke-width="1.2" opacity="0.35"/>
+
   <!-- LL text -->
-  <text x="96" y="58" font-family="Arial, Montserrat, sans-serif" font-size="42" font-weight="700" letter-spacing="-1" fill="#0F1B3D">LL</text>
+  <text
+    x="108"
+    y="58"
+    font-family="'Montserrat', 'Arial', sans-serif"
+    font-weight="700"
+    font-size="46"
+    fill="#0F1B3D"
+    letter-spacing="4"
+    dominant-baseline="auto">LL</text>
 
-  <!-- Gold dot accent after LL -->
-  <circle cx="162" cy="46" r="4.5" fill="url(#goldGrad)"/>
-
-  <!-- Thin vertical separator line -->
-  <line x1="178" y1="28" x2="178" y2="66" stroke="#0F1B3D" stroke-width="1" opacity="0.25"/>
-
-  <!-- WEALTH text -->
-  <text x="191" y="58" font-family="Arial, Montserrat, sans-serif" font-size="13" font-weight="400" letter-spacing="5" fill="#0F1B3D" opacity="0.75">WEALTH</text>
-
-  <!-- Bottom gold underline accent under WEALTH -->
-  <rect x="191" y="65" width="88" height="1.5" rx="1" fill="url(#goldGrad)" opacity="0.7"/>
+  <!-- Wealth text — perfectly centered below LL -->
+  <text
+    x="174"
+    y="76"
+    font-family="'Montserrat', 'Arial', sans-serif"
+    font-weight="400"
+    font-size="13"
+    fill="#0F1B3D"
+    letter-spacing="6"
+    text-anchor="middle"
+    dominant-baseline="auto">WEALTH</text>
 </svg>

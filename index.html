@@ -1962,9 +1962,9 @@ async function animatePublish(pid) {
   if (vcToken) {
     try {
       const deployFiles = [
-        { file: 'index.html', data: siteHtml, encoding: 'utf8' }
+        { file: 'index.html', data: siteHtml, encoding: 'utf-8' }
       ];
-      if (logoSvg) deployFiles.push({ file: 'logo.svg', data: logoSvg, encoding: 'utf8' });
+      if (logoSvg) deployFiles.push({ file: 'logo.svg', data: logoSvg, encoding: 'utf-8' });
 
       const deployRes = await fetch('https://api.vercel.com/v13/deployments', {
         method: 'POST',

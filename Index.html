@@ -316,10 +316,13 @@ const S = {
   apiKey:      (()=>{ try { return localStorage.getItem('awt_apikey') || ''; } catch(e){ return ''; } })(),
   githubToken: (()=>{ try { return localStorage.getItem('awt_githubtoken') || ''; } catch(e){ return ''; } })(),
   vercelToken: (()=>{ try { return localStorage.getItem('awt_verceltoken') || ''; } catch(e){ return ''; } })(),
+  openaiKey:   (()=>{ try { return localStorage.getItem('awt_openaikey') || ''; } catch(e){ return ''; } })(),
   results:     lsGet('awt_results', {}),
   apiConfigOpen: false,
   githubCfgOpen: false,
   vercelCfgOpen: false,
+  openaiCfgOpen: false,
+  fotoCorpInput: {}, // session-only: { pid: dataUrl }
 };
 
 function saveState() {
@@ -533,6 +536,7 @@ function rApiCfg() {
   const hasKey    = !!S.apiKey;
   const hasGH     = !!S.githubToken;
   const hasVercel = !!S.vercelToken;
+  const hasOpenAI = !!S.openaiKey;
   const inp = S.apiConfigOpen ? `<div class="api-input-wrap">
     <input class="api-input" id="api-key-input" type="password"
       placeholder="sk-ant-api03-…"
@@ -591,6 +595,24 @@ function rApiCfg() {
       <button class="api-cfg-btn" data-a="toggle-vercelcfg">${hasVercel ? '✎' : '+ Config'}</button>
     </div>
     ${vercelInp}
+    <div class="api-cfg-row" data-a="toggle-openaicfg" style="margin-top:6px">
+      <span class="api-dot ${hasOpenAI ? 'ok' : 'off'}"></span>
+      <span class="api-cfg-lbl">${hasOpenAI ? 'OpenAI conectada' : 'OpenAI não configurada'}</span>
+      <button class="api-cfg-btn" data-a="toggle-openaicfg">${hasOpenAI ? '✎' : '+ Config'}</button>
+    </div>
+    ${S.openaiCfgOpen ? `<div class="api-input-wrap">
+      <input class="api-input" id="openai-key-input" type="password"
+        placeholder="sk-…"
+        value="${S.openaiKey}"
+        onkeydown="if(event.key==='Enter'){document.querySelector('[data-a=save-openaikey]').click()}" />
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn btn-p" data-a="save-openaikey" style="font-size:11px;padding:5px 12px">Salvar</button>
+        <button class="btn btn-s" data-a="close-openaicfg" style="font-size:11px;padding:5px 10px">✕</button>
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:6px;line-height:1.5">
+        Chave OpenAI com acesso ao gpt-image-1. Usada para gerar fotos corporativas automaticamente.
+      </div>
+    </div>` : ''}
   </div>`;
 }
 
@@ -852,6 +874,41 @@ function rGen(p, step, si, type) {
         </div>
       </div>`;
     } else {
+      if (type === 'fotoCorp') {
+        const fotoInput = S.fotoCorpInput && S.fotoCorpInput[p.id];
+        body = `<div class="gen-idle">
+          <div class="gen-idle-icon">📸</div>
+          ${S.openaiKey ? `
+            <p class="gen-idle-desc">Envie a foto original — o ChatGPT vai transformar em retrato executivo.</p>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+              <label for="fotocorp-orig-${p.id}" style="cursor:pointer;padding:8px 16px;border:1.5px solid var(--borda);border-radius:7px;font-size:13px;color:var(--txt);background:var(--surface)">📎 Escolher foto</label>
+              <input type="file" id="fotocorp-orig-${p.id}" accept="image/*" style="display:none" onchange="handleFotoCorpInput(this, ${p.id})">
+              <span style="font-size:12px;color:${fotoInput ? '#059669' : 'var(--txt-s)'}">
+                ${fotoInput ? '✅ Foto carregada — pronto para gerar' : 'Nenhuma foto selecionada'}
+              </span>
+            </div>
+            <button class="btn btn-p btn-lg" data-a="gen-fotocorp" data-pid="${p.id}" data-sid="${step.id}" ${fotoInput ? '' : 'disabled style="opacity:.45;cursor:not-allowed"'}>
+              ⚡ Gerar com GPT
+            </button>
+            <div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px">
+              <div style="flex:1;height:1px;background:var(--borda)"></div>
+              <span style="font-size:12px;color:var(--txt-s)">ou</span>
+              <div style="flex:1;height:1px;background:var(--borda)"></div>
+            </div>
+            <label for="fotocorp-upload-${p.id}" style="cursor:pointer;padding:8px 16px;border:1.5px dashed var(--borda);border-radius:7px;font-size:13px;color:var(--txt-s)">📁 Já tenho foto tratada — fazer upload</label>
+            <input type="file" id="fotocorp-upload-${p.id}" accept="image/*" style="display:none" onchange="handleFotoCorpUpload(this, ${p.id}, '${step.id}')">
+          ` : `
+            <p class="gen-idle-desc">Configure a API OpenAI para gerar automaticamente, ou faça upload da foto já tratada no ChatGPT.</p>
+            <label for="fotocorp-upload-${p.id}" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border:1.5px dashed var(--borda);border-radius:8px;font-size:13px;color:var(--txt-s)">
+              📁 Upload foto tratada
+            </label>
+            <input type="file" id="fotocorp-upload-${p.id}" accept="image/*" style="display:none" onchange="handleFotoCorpUpload(this, ${p.id}, '${step.id}')">
+            <div style="margin-top:10px;font-size:11px;color:var(--txt-s)">
+              Para geração automática: <button data-a="toggle-openaicfg" style="background:none;border:none;color:var(--roxo);font-size:11px;cursor:pointer;text-decoration:underline">configure a API OpenAI ↓</button>
+            </div>
+          `}
+        </div>`;
+      } else {
       body = `<div class="gen-idle">
         <div class="gen-idle-icon">${labels[type].split(' ')[0]}</div>
         <p class="gen-idle-desc">${descs[type]}</p>
@@ -871,6 +928,7 @@ function rGen(p, step, si, type) {
         </label>
         <input type="file" id="logo-upload-${p.id}" accept="image/*,.svg" style="display:none" onchange="handleLogoFileUpload(this, ${p.id}, '${step.id}')">` : ''}
       </div>`;
+      } // end else (not fotoCorp)
     }
   } else if (st === 'ajustes') {
     const key = p.id + '_' + step.id;
@@ -1020,11 +1078,21 @@ function rGen(p, step, si, type) {
         preview = `<div style="margin:12px 0">${sitePreview(p, curIter)}</div>`;
       }
     } else if (type === 'fotoCorp') {
-      preview = `<div style="text-align:center;padding:20px">
-        <div style="width:100px;height:140px;background:linear-gradient(135deg,#E8E0F0,#D1C4E9);border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:36px">👤</div>
-        <div style="font-size:12px;color:#666">${p.nomeBanker.split(' ')[0]}-FotoCorp.png</div>
-        <div style="font-size:11px;color:#999;margin-top:3px">Gerada via ChatGPT</div>
-      </div>`;
+      if (realResult && realResult.startsWith('data:image')) {
+        preview = `<div style="text-align:center;padding:16px">
+          <img src="${realResult}" style="max-width:100%;max-height:320px;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.12)" alt="Foto corporativa">
+          <div style="font-size:11px;color:#999;margin-top:8px">${p.nomeBanker.split(' ')[0]}-FotoCorp.png</div>
+          <div style="margin-top:8px">
+            <a href="${realResult}" download="${p.nomeBanker.split(' ')[0]}-FotoCorp.png" style="font-size:12px;color:var(--roxo);text-decoration:none">⬇ Baixar foto</a>
+          </div>
+        </div>`;
+      } else {
+        preview = `<div style="text-align:center;padding:20px">
+          <div style="width:100px;height:140px;background:linear-gradient(135deg,#E8E0F0,#D1C4E9);border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:36px">👤</div>
+          <div style="font-size:12px;color:#666">${p.nomeBanker.split(' ')[0]}-FotoCorp.png</div>
+          <div style="font-size:11px;color:#999;margin-top:3px">Gerada via ChatGPT</div>
+        </div>`;
+      }
     }
 
     const ajustesNote = S.ajustesNote && S.ajustesNote[p.id + '_' + step.id];
@@ -1297,6 +1365,22 @@ document.addEventListener('click', function(e) {
     if (S.vercelCfgOpen) setTimeout(() => { const i = document.getElementById('vercel-token-input'); if(i) i.focus(); }, 50);
   }
   if (a === 'close-vercelcfg') { S.vercelCfgOpen = false; render(); }
+  if (a === 'toggle-openaicfg') { S.openaiCfgOpen = !S.openaiCfgOpen; render(); if (S.openaiCfgOpen) setTimeout(() => { const i = document.getElementById('openai-key-input'); if(i) i.focus(); }, 50); }
+  if (a === 'close-openaicfg') { S.openaiCfgOpen = false; render(); }
+  if (a === 'save-openaikey') {
+    const inp = document.getElementById('openai-key-input');
+    if (inp) {
+      S.openaiKey = inp.value.replace(/[^\x20-\x7E]/g, '').trim();
+      try { if (S.openaiKey) localStorage.setItem('awt_openaikey', S.openaiKey); else localStorage.removeItem('awt_openaikey'); } catch(e){}
+      S.openaiCfgOpen = false;
+      render();
+    }
+  }
+  if (a === 'gen-fotocorp') {
+    sst(pid, sid, 'generating');
+    render();
+    animateFotoCorp(pid, sid);
+  }
   if (a === 'save-verceltoken') {
     const inp = document.getElementById('vercel-token-input');
     if (inp) {
@@ -1784,6 +1868,76 @@ REGRAS TÉCNICAS:
 Retorne APENAS o HTML completo com doctype, sem markdown, sem explicações.${logoInstructions}${ajuste}`;
 
   return '';
+}
+
+// ── FOTO CORPORATIVA ──
+const FOTO_CORP_PROMPT = `Transforme esta foto em um retrato corporativo executivo de alta qualidade. Mantenha fielmente os traços faciais, expressão natural e identidade da pessoa. Substitua a roupa por um terno executivo moderno na cor azul-marinho ou grafite, camisa branca e sem gravata. Utilize iluminação profissional de estúdio suave, simulando luz natural proveniente das janelas do ambiente, mantendo a mesma direção, intensidade e temperatura de cor da iluminação do fundo. Adicione um fundo corporativo elegante e desfocado em tons neutros (escritório moderno), preservando uma integração natural entre sujeito e ambiente. Ajuste postura, enquadramento e composição para padrão LinkedIn e perfil executivo. Realce a nitidez apenas no rosto e nos olhos, mantendo textura de pele natural, sem excesso de definição. Evite aparência de renderização ou HDR exagerado. Aplique leve granulação fotográfica e contraste moderado para que o sujeito tenha o mesmo nível de detalhe do fundo. Reduza ligeiramente a nitidez do terno e das bordas para evitar efeito de recorte. Aparência confiante, sofisticada e acessível. Fotografia corporativa premium, estilo CEO, wealth management, banco de investimentos e consultoria estratégica. Lente 85 mm, profundidade de campo reduzida, fotografia editorial realista, com integração perfeita entre pessoa e fundo, como uma fotografia capturada diretamente em ambiente corporativo.`;
+
+function handleFotoCorpInput(input, pid) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    if (!S.fotoCorpInput) S.fotoCorpInput = {};
+    S.fotoCorpInput[pid] = { dataUrl: e.target.result, mime: file.type, name: file.name };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleFotoCorpUpload(input, pid, sid) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const rKey = pid + '_' + sid;
+    S.results[rKey] = e.target.result;
+    lsSet('awt_results', S.results);
+    sst(pid, sid, 'done');
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function animateFotoCorp(pid, sid) {
+  const p = S.parceiros.find(x => x.id === pid);
+  if (!p) return;
+  const rKey = pid + '_' + sid;
+  const fotoData = S.fotoCorpInput && S.fotoCorpInput[pid];
+  if (!fotoData || !S.openaiKey) {
+    S.results[rKey + '_error'] = 'Foto ou API key não configurada';
+    sst(pid, sid, 'done');
+    render();
+    return;
+  }
+  try {
+    // Converte dataUrl → Blob
+    const res = await fetch(fotoData.dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], 'foto.png', { type: fotoData.mime || 'image/png' });
+    const form = new FormData();
+    form.append('model', 'gpt-image-1');
+    form.append('image', file);
+    form.append('prompt', FOTO_CORP_PROMPT);
+    form.append('n', '1');
+    form.append('size', '1024x1024');
+
+    const apiRes = await fetch('https://api.openai.com/v1/images/edits', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${S.openaiKey}` },
+      body: form
+    });
+    const data = await apiRes.json();
+    if (!apiRes.ok) throw new Error(data.error?.message || JSON.stringify(data));
+    const b64 = data.data[0].b64_json;
+    S.results[rKey] = `data:image/png;base64,${b64}`;
+    lsSet('awt_results', S.results);
+    delete S.results[rKey + '_error'];
+  } catch(e) {
+    S.results[rKey + '_error'] = e.message;
+  }
+  sst(pid, sid, 'done');
+  render();
 }
 
 // ── UPLOAD LOGO EXISTENTE ──

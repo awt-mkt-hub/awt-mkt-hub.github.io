@@ -1961,10 +1961,11 @@ async function animatePublish(pid) {
   let vercelUrl = null;
   if (vcToken) {
     try {
+      const toB64 = s => btoa(unescape(encodeURIComponent(s)));
       const deployFiles = [
-        { file: 'index.html', data: siteHtml, encoding: 'utf-8' }
+        { file: 'index.html', data: toB64(siteHtml), encoding: 'base64' }
       ];
-      if (logoSvg) deployFiles.push({ file: 'logo.svg', data: logoSvg, encoding: 'utf-8' });
+      if (logoSvg) deployFiles.push({ file: 'logo.svg', data: toB64(logoSvg), encoding: 'base64' });
 
       const deployRes = await fetch('https://api.vercel.com/v13/deployments', {
         method: 'POST',

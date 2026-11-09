@@ -1043,6 +1043,7 @@ function rGen(p, step, si, type) {
         <button class="btn btn-g" data-a="done" data-pid="${p.id}" data-sid="${step.id}">Aprovar →</button>
         ${!realResult && S.apiKey && type !== 'fotoCorp' ? `<button class="btn btn-p" data-a="regen-real" data-pid="${p.id}" data-sid="${step.id}" data-type="${type}">⚡ Gerar com Claude</button>` : ''}
         <button class="btn btn-r" data-a="show-ajustes" data-pid="${p.id}" data-sid="${step.id}" data-type="${type}">Pedir ajustes</button>
+        ${type === 'logo' ? `<label for="logo-upload-res-${p.id}" style="cursor:pointer;padding:7px 14px;border:1.5px solid var(--borda);border-radius:7px;font-size:12px;color:var(--txt-s);background:var(--surface);transition:all .15s" onmouseover="this.style.borderColor='var(--roxo)';this.style.color='var(--roxo)'" onmouseout="this.style.borderColor='var(--borda)';this.style.color='var(--txt-s)'">📁 Usar logo próprio</label><input type="file" id="logo-upload-res-${p.id}" accept="image/*,.svg" style="display:none" onchange="handleLogoFileUpload(this, ${p.id}, '${step.id}')">` : ''}
       </div>
     </div>`;
   }

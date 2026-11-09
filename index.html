@@ -859,6 +859,17 @@ function rGen(p, step, si, type) {
         <button class="btn btn-p btn-lg" data-a="gen" data-pid="${p.id}" data-sid="${step.id}" data-type="${type}">
           ⚡ Gerar ${labels[type].split(' ').slice(1).join(' ')}
         </button>
+        ${type === 'logo' ? `
+        <div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px">
+          <div style="flex:1;height:1px;background:var(--borda)"></div>
+          <span style="font-size:12px;color:var(--txt-s)">ou</span>
+          <div style="flex:1;height:1px;background:var(--borda)"></div>
+        </div>
+        <label for="logo-upload-${p.id}" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border:1.5px dashed var(--borda);border-radius:8px;font-size:13px;color:var(--txt-s);transition:all .15s" onmouseover="this.style.borderColor='var(--roxo)';this.style.color='var(--roxo)'" onmouseout="this.style.borderColor='var(--borda)';this.style.color='var(--txt-s)'">
+          📁 Já tenho logo — fazer upload
+          <span style="font-size:11px;opacity:.7">(SVG, PNG ou JPG)</span>
+        </label>
+        <input type="file" id="logo-upload-${p.id}" accept="image/*,.svg" style="display:none" onchange="handleLogoFileUpload(this, ${p.id}, '${step.id}')">` : ''}
       </div>`;
     }
   } else if (st === 'ajustes') {
@@ -1772,6 +1783,35 @@ REGRAS TÉCNICAS:
 Retorne APENAS o HTML completo com doctype, sem markdown, sem explicações.${logoInstructions}${ajuste}`;
 
   return '';
+}
+
+// ── UPLOAD LOGO EXISTENTE ──
+function handleLogoFileUpload(input, pid, sid) {
+  const file = input.files[0];
+  if (!file) return;
+  const isSvg = file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+  const reader = new FileReader();
+  reader.onload = e => {
+    let svgContent;
+    if (isSvg) {
+      svgContent = e.target.result;
+    } else {
+      const data = e.target.result;
+      const comma = data.indexOf(',');
+      const b64 = data.substring(comma + 1);
+      const mime = file.type || 'image/png';
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><image href="data:${mime};base64,${b64}" width="400" height="200" preserveAspectRatio="xMidYMid meet"/></svg>`;
+    }
+    const rKey = pid + '_' + sid;
+    S.results[rKey] = svgContent;
+    lsSet('awt_results', S.results);
+    S.logoApproved = S.logoApproved || {};
+    S.logoApproved[pid] = true;
+    sst(pid, sid, 'done');
+    render();
+  };
+  if (isSvg) reader.readAsText(file);
+  else reader.readAsDataURL(file);
 }
 
 // ── ANIMATE GENERATION (mock quando sem API key, real com) ──

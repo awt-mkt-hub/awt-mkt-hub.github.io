@@ -205,7 +205,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 // ═══════════════════════════════════════════════
 // DATA
 // ═══════════════════════════════════════════════
-const PARTNERS = [
+let PARTNERS = [
   {
     id: 1, slug: 'naiane-wealth',
     nomeMarca: 'Naiane Wealth', nomeBanker: 'Naiane Mota Ferreira Lauria',
@@ -295,7 +295,7 @@ const ALL_STEPS = [
   { id: 'fotoCorp',      label: 'Foto Corp.',      desc: 'Foto corporativa',       icon: '📸' },
   { id: 'revisao',       label: 'Revisão',         desc: 'Check-up final',         icon: '👁️' },
   { id: 'publicar',      label: 'Publicar',        desc: 'GitHub + Vercel',        icon: '🚀' },
-  { id: 'entregar',      label: 'Entregar',        desc: 'InvestorPro + Email',    icon: '📤' },
+  { id: 'entregar',      label: 'Entregar',        desc: 'Enviar ao Onboarding',   icon: '📤' },
 ];
 
 // ═══════════════════════════════════════════════
@@ -317,12 +317,18 @@ const S = {
   githubToken: (()=>{ try { return localStorage.getItem('awt_githubtoken') || ''; } catch(e){ return ''; } })(),
   vercelToken: (()=>{ try { return localStorage.getItem('awt_verceltoken') || ''; } catch(e){ return ''; } })(),
   openaiKey:   (()=>{ try { return localStorage.getItem('awt_openaikey') || ''; } catch(e){ return ''; } })(),
+  awtIntUrl:   (()=>{ try { return localStorage.getItem('awt_inturl') || ''; } catch(e){ return ''; } })(),
+  awtIntKey:   (()=>{ try { return localStorage.getItem('awt_intkey') || ''; } catch(e){ return ''; } })(),
+  operEmail:   (()=>{ try { return localStorage.getItem('awt_operemail') || ''; } catch(e){ return ''; } })(),
   results:     lsGet('awt_results', {}),
   apiConfigOpen: false,
   githubCfgOpen: false,
   vercelCfgOpen: false,
   openaiCfgOpen: false,
+  awtIntCfgOpen: false,
   fotoCorpInput: {}, // session-only: { pid: dataUrl }
+  entregandoPid: null, // pid currently being delivered (blocks double-click)
+  deliveryVersion: lsGet('awt_delivery_version', {}), // { pid: versionNumber }
 };
 
 function saveState() {
@@ -417,7 +423,9 @@ function logoSVG(p, dark, iter) {
 function bizCard(p, iter) {
   const c = '#' + p.corHex;
   const ini = initials(p.nomeMarca);
-  const firstName = p.nomeBanker.split(' ')[0] + ' ' + p.nomeBanker.split(' ').slice(-1)[0];
+  const priNome = p.primeiroNome || p.nomeBanker.split(' ')[0];
+  const firstName = priNome + ' ' + p.nomeBanker.split(' ').slice(-1)[0];
+  const cargo = p.cargo || 'Planejador Patrimonial';
   const v = (iter || 0) % 3;
 
   if (v === 0) {
@@ -432,7 +440,7 @@ function bizCard(p, iter) {
       </div>
       <div>
         <div style="font-size:13px;font-weight:600">${firstName}</div>
-        <div style="font-size:10px;opacity:0.7;margin-top:1px">Planejador Patrimonial</div>
+        <div style="font-size:10px;opacity:0.7;margin-top:1px">${cargo}</div>
         <div style="font-size:9px;opacity:0.55;margin-top:6px">${p.email}</div>
         <div style="font-size:9px;opacity:0.55">${p.celular}</div>
       </div>
@@ -451,7 +459,7 @@ function bizCard(p, iter) {
         </div>
         <div>
           <div style="font-size:13px;font-weight:600;color:#1A1A1A">${firstName}</div>
-          <div style="font-size:9px;color:#666;margin-top:1px">Planejador Patrimonial</div>
+          <div style="font-size:9px;color:#666;margin-top:1px">${cargo}</div>
           <div style="font-size:8px;color:#999;margin-top:6px">${p.email}</div>
           <div style="font-size:8px;color:#999">${p.celular}</div>
         </div>
@@ -471,7 +479,7 @@ function bizCard(p, iter) {
       </div>
       <div style="padding:14px 16px">
         <div style="font-size:13px;font-weight:600;color:white">${firstName}</div>
-        <div style="font-size:9px;color:rgba(255,255,255,0.6);margin-top:1px">Planejador Patrimonial</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.6);margin-top:1px">${cargo}</div>
         <div style="font-size:8px;color:rgba(255,255,255,0.4);margin-top:8px">${p.email}</div>
         <div style="font-size:8px;color:rgba(255,255,255,0.4)">${p.celular}</div>
       </div>
@@ -613,6 +621,36 @@ function rApiCfg() {
         Chave OpenAI com acesso ao gpt-image-1. Usada para gerar fotos corporativas automaticamente.
       </div>
     </div>` : ''}
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">
+      <div class="api-cfg-row" data-a="toggle-awtintcfg">
+        <span class="api-dot ${(S.awtIntUrl && S.awtIntKey) ? 'ok' : 'off'}"></span>
+        <span class="api-cfg-lbl">${(S.awtIntUrl && S.awtIntKey) ? 'Integração AWT ativa' : 'Integração AWT não configurada'}</span>
+        <button class="api-cfg-btn" data-a="toggle-awtintcfg">${(S.awtIntUrl && S.awtIntKey) ? '✎' : '+ Config'}</button>
+      </div>
+      ${S.awtIntCfgOpen ? `<div class="api-input-wrap">
+        <input class="api-input" id="awt-inturl-input" type="text"
+          placeholder="https://onboarding.awtgroup.com.br"
+          value="${S.awtIntUrl}"
+          onkeydown="if(event.key==='Enter'){document.querySelector('[data-a=save-awtint]').click()}" />
+        <input class="api-input" id="awt-intkey-input" type="password"
+          placeholder="chave-de-integração"
+          value="${S.awtIntKey}"
+          style="margin-top:4px"
+          onkeydown="if(event.key==='Enter'){document.querySelector('[data-a=save-awtint]').click()}" />
+        <input class="api-input" id="awt-operemail-input" type="email"
+          placeholder="e-mail do operador (thiago@awtgroup.com.br)"
+          value="${S.operEmail}"
+          style="margin-top:4px"
+          onkeydown="if(event.key==='Enter'){document.querySelector('[data-a=save-awtint]').click()}" />
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn btn-p" data-a="save-awtint" style="font-size:11px;padding:5px 12px">Salvar</button>
+          <button class="btn btn-s" data-a="close-awtintcfg" style="font-size:11px;padding:5px 10px">✕</button>
+        </div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:6px;line-height:1.5">
+          Integração com o sistema de onboarding AWT. Fila, eventos e entrega de arquivos.
+        </div>
+      </div>` : ''}
+    </div>
   </div>`;
 }
 
@@ -674,14 +712,18 @@ function rQueue() {
     const st = partnerStatus(p);
     const stLabel = { pend: 'Pendente', prog: 'Em andamento', ok: 'Concluído' }[st];
     const stChip  = { pend: 'chip-pend', prog: 'chip-prog',   ok: 'chip-ok'   }[st];
-    const ativosChips = p.ativos.map(a => `<span class="chip chip-ativo">${a}</span>`).join('');
-    return `<div class="pc" style="position:relative">
+    const ativosChips = (p.ativos || []).map(a => `<span class="chip chip-ativo">${a}</span>`).join('');
+    const ajusteBadge = p.status === 'ajuste_pedido'
+      ? `<div style="display:flex;align-items:center;gap:5px;margin-top:6px"><span style="background:#FEF3C7;color:#92400E;font-size:10px;padding:2px 7px;border-radius:12px;font-weight:600">⚠ Ajuste pedido</span>${p.ajusteComentario ? `<span style="font-size:11px;color:#92400E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${p.ajusteComentario}</span>` : ''}</div>`
+      : '';
+    return `<div class="pc" style="position:relative${p.status === 'ajuste_pedido' ? ';border-color:#FCD34D' : ''}">
       <div data-a="sel" data-id="${p.id}" style="display:flex;align-items:center;gap:14px;flex:1;cursor:pointer">
         <div class="pc-av" style="background:#${p.corHex}">${initials(p.nomeMarca)}</div>
         <div class="pc-info">
           <div class="pc-name">${p.nomeMarca}</div>
-          <div class="pc-banker">${p.nomeBanker} · ${p.dataEntrada}</div>
+          <div class="pc-banker">${p.nomeBanker}${p.dataEntrada ? ' · ' + p.dataEntrada : ''}</div>
           <div class="pc-tags">${ativosChips}</div>
+          ${ajusteBadge}
         </div>
         <span class="chip ${stChip}" style="margin-left:8px">${stLabel}</span>
         <span class="pc-arr">›</span>
@@ -728,9 +770,12 @@ function rQueue() {
       ${rApiCfg()}
     </div>
     <div class="main">
-      <div class="q-head">
-        <h1>${tab === 'ativos' ? 'Em andamento' : 'Concluídos'}</h1>
-        <p>${tab === 'ativos' ? `${ativos.length} parceiros · ${pendCount} aguardando` : `${concluidos.length} parceiros entregues`}</p>
+      <div class="q-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <h1>${tab === 'ativos' ? 'Em andamento' : 'Concluídos'}</h1>
+          <p>${tab === 'ativos' ? `${ativos.length} parceiros · ${pendCount} aguardando` : `${concluidos.length} parceiros entregues`}</p>
+        </div>
+        ${S.awtIntUrl && S.awtIntKey ? `<button class="btn btn-s" data-a="load-queue" style="font-size:12px;padding:7px 14px">🔄 Atualizar fila</button>` : ''}
       </div>
       ${successBanner}
       <div class="q-list">${tab === 'ativos' ? listaAtivos : listaConcluidos}</div>
@@ -1210,54 +1255,107 @@ function rPublicar(p, step, si, steps) {
 
 // ── ENTREGAR ──
 function rEntregar(p, step, si, steps) {
-  const firstName = p.nomeBanker.split(' ')[0];
-  const subject = encodeURIComponent(`Seus materiais de marca estão prontos — ${p.nomeMarca}`);
-  const body = encodeURIComponent(`Olá, ${firstName}!\n\nSeus materiais de marca estão prontos.\n\n• Site: https://${p.slug}.vercel.app\n• Cartão de visitas e papel timbrado em anexo\n• Logo em PNG e SVG em anexo\n\nEm breve você receberá o acesso ao InvestorPro para acompanhar sua jornada.\n\nAtt,\nEquipe AWT Group`);
-  const mailtoHref = `mailto:${p.email}?subject=${subject}&body=${body}`;
+  const firstName = p.primeiroNome || p.nomeBanker.split(' ')[0];
+  const hasPhoto = (p.ativos || []).includes('fotos-ai');
+  const hasPap = (p.ativos || []).includes('papelaria');
+  const hasIntegration = !!(S.awtIntUrl && S.awtIntKey);
+  const isEntregando = S.entregandoPid === p.id;
+  const pubUrl = S.pubUrl || `https://${p.slug}.vercel.app`;
+  const ghUrl = `https://github.com/awt-mkt-hub/awt-mkt-hub.github.io/tree/main/${p.slug}`;
 
-  const hasPhoto = p.ativos.includes('fotos-ai');
-  const hasPap = p.ativos.includes('papelaria');
+  // Build files list
+  const files = [];
+  if (S.results[p.id + '_logo']) files.push({ kind: 'logo_svg', label: 'Logo SVG', icon: '🎨', key: p.id + '_logo' });
+  if (S.results[p.id + '_cartao']) files.push({ kind: 'cartao_pdf', label: 'Cartão de Visitas (HTML)', icon: '🪪', key: p.id + '_cartao' });
+  if (S.results[p.id + '_papelTimbrado']) files.push({ kind: 'timbrado_pdf', label: 'Papel Timbrado (HTML)', icon: '📄', key: p.id + '_papelTimbrado' });
+  if (S.results[p.id + '_site']) files.push({ kind: 'site_html', label: 'Site HTML', icon: '🌐', key: p.id + '_site' });
+  if (S.results[p.id + '_fotoCorp']) files.push({ kind: 'foto_png', label: 'Foto Corporativa', icon: '📸', key: p.id + '_fotoCorp' });
 
-  return `<div class="sc">
-    <div class="sc-head"><h2>📤 Entregar ao Parceiro</h2><p>Faça o upload no InvestorPro e envie o e-mail para o banker.</p></div>
-    <div class="card">
-      <div class="card-title">InvestorPro — Gestão de Progresso <span class="badge badge-pend">conexão pendente</span></div>
-      <div class="disabled">
-        <div class="entrega-block">
-          <h4>Link do site publicado</h4>
-          <div class="ent-link">🔗 https://${p.slug}.vercel.app</div>
-        </div>
-        ${hasPap ? `<div class="entrega-block"><h4>Papelaria</h4>
-          <div class="ent-file"><span>📄</span>${p.slug}-cartao-visita.pdf</div>
-          <div class="ent-file"><span>📄</span>${p.slug}-papel-timbrado.pdf</div>
-        </div>` : ''}
-        <div class="entrega-block"><h4>Arquivos do Site (logos)</h4>
-          <div class="ent-file"><span>🖼️</span>${p.slug}-logo.png</div>
-          <div class="ent-file"><span>🖼️</span>${p.slug}-logo-branco.png</div>
-        </div>
-        ${hasPhoto ? `<div class="entrega-block"><h4>Foto Corporativa</h4>
-          <div class="ent-file"><span>📸</span>${firstName}-FotoCorp.png</div>
-        </div>` : ''}
-      </div>
-      <div class="box-warn">
-        ⚠️ Upload no InvestorPro disponível quando a integração estiver ativa.
-        Por enquanto, faça manualmente em <strong>partner-investorpro.com/gestao/progresso</strong>.
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Enviar por E-mail</div>
-      <p style="font-size:13px;color:var(--suave);margin-bottom:12px">Enviar todos os entregáveis para <strong>${p.email}</strong></p>
-      <div style="padding:11px 14px;background:var(--bg);border-radius:8px;margin-bottom:16px">
-        <div style="font-size:10px;color:#999;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">Assunto</div>
-        <div style="font-size:13px">Seus materiais de marca estão prontos — ${p.nomeMarca}</div>
+  const fileList = files.map(f => `<div class="ent-file"><span>${f.icon}</span>${f.label}</div>`).join('');
+
+  if (!hasIntegration) {
+    // Fallback: sem integração configurada, mostra aviso e botão manual
+    const subject = encodeURIComponent(`Seus materiais de marca estão prontos — ${p.nomeMarca}`);
+    const bodyTxt = encodeURIComponent(`Olá, ${firstName}!\n\nSeus materiais de marca estão prontos.\n\n• Site: ${pubUrl}\n• Logo, cartão e timbrado em anexo\n\nAtt,\nEquipe AWT Group`);
+    return `<div class="sc">
+      <div class="sc-head"><h2>📤 Entregar ao Parceiro</h2><p>Configure a Integração AWT para enviar ao onboarding automaticamente.</p></div>
+      <div class="card">
+        <div class="card-title">Integração AWT <span class="badge badge-pend">não configurada</span></div>
+        <div class="box-warn" style="margin-bottom:12px">⚠️ Configure a URL base e chave de integração na barra lateral para habilitar a entrega ao onboarding.</div>
+        <div class="entrega-block"><h4>Materiais prontos para entrega</h4>${fileList || '<div style="color:#999;font-size:12px">Nenhum arquivo gerado ainda.</div>'}</div>
       </div>
       <div class="btn-row">
-        <a href="${mailtoHref}" class="btn btn-g">✉️ Enviar e-mail para ${firstName}</a>
+        <a href="mailto:${p.email}?subject=${subject}&body=${bodyTxt}" class="btn btn-g">✉️ Enviar e-mail manualmente para ${firstName}</a>
         <button class="btn btn-p" data-a="done" data-pid="${p.id}" data-sid="entregar">Marcar como concluído ✓</button>
       </div>
+    </div>`;
+  }
+
+  // Com integração configurada
+  const version = (S.deliveryVersion[p.id] || 0) + 1;
+  const isAjuste = p.status === 'ajuste_pedido';
+
+  const entregaSt = S.results[p.id + '_entrega_sent'];
+
+  if (entregaSt) {
+    const sentAt = S.results[p.id + '_entrega_sent_at'] || '';
+    return `<div class="sc">
+      <div class="sc-head"><h2>📤 Entregue!</h2><p>Materiais enviados ao onboarding AWT.</p></div>
+      <div class="card">
+        <div class="box-ok">
+          <span style="font-size:22px">✅</span>
+          <div>
+            <div style="font-weight:700;color:#065F46">Enviado ao onboarding em ${sentAt}</div>
+            <div style="font-size:12px;color:#065F46;margin-top:2px">Versão ${version - 1} · ${files.length} arquivos · a Fran receberá para aprovação</div>
+          </div>
+        </div>
+        ${isAjuste ? `<div class="box-warn" style="margin-top:12px">🔄 Esta foi uma <strong>reentrega (v${version - 1})</strong> após ajuste pedido.</div>` : ''}
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-p btn-lg" data-a="done" data-pid="${p.id}" data-sid="entregar">Concluir ✓</button>
+        <button class="btn btn-s" data-a="re-entregar" data-pid="${p.id}" style="font-size:12px">↺ Reenviar</button>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="sc">
+    <div class="sc-head">
+      <h2>📤 Enviar ao Onboarding AWT</h2>
+      <p>${isAjuste ? `🔄 Reentrega — ${p.ajusteComentario || 'ajuste solicitado'}` : `Carrega os arquivos e notifica o sistema — a Fran aprova antes de o e-mail sair.`}</p>
     </div>
+    <div class="card">
+      <div class="card-title">Arquivos a enviar${files.length ? '' : ' <span style="color:#EF4444;font-size:10px">nenhum arquivo gerado</span>'}</div>
+      ${fileList || '<div style="color:#999;font-size:12px">Gere os assets nas etapas anteriores antes de entregar.</div>'}
+    </div>
+    <div class="card">
+      <div class="card-title">Site publicado</div>
+      <div class="ent-link">🔗 ${pubUrl}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Checklist de entrega</div>
+      <div class="chk-item"><input type="checkbox" id="ec1"><label for="ec1">Nome da marca correto em todos os materiais</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec2"><label for="ec2">Cor primária correta — #${p.corHex}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec3"><label for="ec3">Botão WhatsApp com número correto — ${p.celular}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec4"><label for="ec4">Disclaimer AWT presente no site</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec5"><label for="ec5">Sem palavras proibidas</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec6"><label for="ec6">Especialidades conferidas: ${(p.especialidades || []).join(', ')}</label></div>
+    </div>
+    <div id="entrega-progress" style="display:none">
+      <div style="background:#F4F0F8;border-radius:8px;padding:14px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:600;color:var(--roxo);margin-bottom:8px">⟳ Enviando ao onboarding…</div>
+        <div id="entrega-log" style="font-size:12px;color:var(--suave);line-height:1.8"></div>
+      </div>
+    </div>
+    <div id="entrega-error" style="display:none;background:#FEE2E2;border-radius:8px;padding:12px 16px;font-size:12px;color:#991B1B;margin-bottom:14px"></div>
+    <div class="btn-row">
+      <button class="btn btn-g btn-lg" data-a="entregar-onboarding" data-pid="${p.id}" ${isEntregando || files.length === 0 ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}>
+        ${isEntregando ? '⟳ Enviando…' : '🚀 Enviar para o onboarding'}
+      </button>
+    </div>
+    ${version > 1 ? `<div style="font-size:11px;color:#999;margin-top:8px">Esta será a <strong>versão ${version}</strong> (reentrega após ajuste).</div>` : ''}
   </div>`;
 }
+
 
 // ═══════════════════════════════════════════════
 // EVENTS
@@ -1288,12 +1386,23 @@ document.addEventListener('click', function(e) {
   if (a === 'jump') {
     S.si = parseInt(el.dataset.i); render(); scrollTop();
   }
+  if (a === 'load-queue') {
+    loadQueue();
+    return;
+  }
   if (a === 'done') {
     const pid = parseInt(el.dataset.pid), sid = el.dataset.sid;
     // Ao aprovar o logo, trava o SVG para usar nas etapas seguintes
     if (sid === 'logo') {
       S.logoApproved = S.logoApproved || {};
       S.logoApproved[pid] = true;
+    }
+    // Ao confirmar o briefing, dispara brand.started (silenciosamente)
+    if (sid === 'briefing') {
+      const pp = gp(pid);
+      if (pp && pp.partnerId) {
+        postBrandEvent({ type: 'brand.started', partnerId: pp.partnerId }).catch(()=>{});
+      }
     }
     sst(pid, sid, 'done');
     const steps = getSteps(gp(pid));
@@ -1377,6 +1486,7 @@ document.addEventListener('click', function(e) {
     }
   }
   if (a === 'gen-fotocorp') {
+    const pid = parseInt(el.dataset.pid), sid = el.dataset.sid;
     sst(pid, sid, 'generating');
     render();
     animateFotoCorp(pid, sid);
@@ -1403,6 +1513,30 @@ document.addEventListener('click', function(e) {
       S.githubCfgOpen = false;
       render();
     }
+  }
+  if (a === 'entregar-onboarding') {
+    const pid = parseInt(el.dataset.pid);
+    if (S.entregandoPid === pid) return; // block double-click
+    S.entregandoPid = pid; render();
+    animateEntrega(pid).then(() => { S.entregandoPid = null; render(); }).catch(() => { S.entregandoPid = null; render(); });
+    return;
+  }
+  if (a === 're-entregar') {
+    const pid = parseInt(el.dataset.pid);
+    delete S.results[pid + '_entrega_sent'];
+    delete S.results[pid + '_entrega_sent_at'];
+    render(); return;
+  }
+  if (a === 'toggle-awtintcfg') { S.awtIntCfgOpen = !S.awtIntCfgOpen; render(); if (S.awtIntCfgOpen) setTimeout(() => { const i = document.getElementById('awt-inturl-input'); if(i) i.focus(); }, 50); }
+  if (a === 'close-awtintcfg') { S.awtIntCfgOpen = false; render(); }
+  if (a === 'save-awtint') {
+    const urlI = document.getElementById('awt-inturl-input');
+    const keyI = document.getElementById('awt-intkey-input');
+    const oemI = document.getElementById('awt-operemail-input');
+    if (urlI) { S.awtIntUrl = urlI.value.trim(); try { if (S.awtIntUrl) localStorage.setItem('awt_inturl', S.awtIntUrl); else localStorage.removeItem('awt_inturl'); } catch(e){} }
+    if (keyI) { S.awtIntKey = keyI.value.trim(); try { if (S.awtIntKey) localStorage.setItem('awt_intkey', S.awtIntKey); else localStorage.removeItem('awt_intkey'); } catch(e){} }
+    if (oemI) { S.operEmail = oemI.value.trim(); try { if (S.operEmail) localStorage.setItem('awt_operemail', S.operEmail); else localStorage.removeItem('awt_operemail'); } catch(e){} }
+    S.awtIntCfgOpen = false; render();
   }
   if (a === 'regen-real') {
     const pid = parseInt(el.dataset.pid), sid = el.dataset.sid, type = el.dataset.type;
@@ -1658,7 +1792,9 @@ function pickRefs(n = 3) {
 }
 
 function buildPrompt(p, type, ajusteNote) {
-  const firstName = p.nomeBanker.split(' ')[0] + ' ' + p.nomeBanker.split(' ').slice(-1)[0];
+  const priNome = p.primeiroNome || p.nomeBanker.split(' ')[0];
+  const firstName = priNome + ' ' + p.nomeBanker.split(' ').slice(-1)[0];
+  const cargo = p.cargo || 'Planejador Patrimonial';
   const ff = p.fonte === 'serif' ? 'serif elegante (Georgia)' : 'sans-serif moderno (Arial/Montserrat)';
   const ajuste = ajusteNote ? `\n\nAJUSTE PEDIDO (aplique obrigatoriamente): ${ajusteNote}` : '';
   // Logo travado — injetado nos prompts de cartão, papel e site para garantir consistência
@@ -1692,7 +1828,7 @@ Crie um arquivo HTML com apenas o CARTÃO DE VISITAS (frente + verso).
 
 DADOS:
 - Nome do banker: ${firstName}
-- Cargo: Planejador Patrimonial
+- Cargo: ${cargo}
 - Escritório: ${p.nomeMarca}
 - Email: ${p.email}
 - Telefone/WhatsApp: ${p.celular}
@@ -1736,7 +1872,7 @@ Crie um arquivo HTML com o PAPEL TIMBRADO em duas versões: retrato (portrait) e
 
 DADOS:
 - Nome do banker: ${firstName}
-- Cargo: Planejador Patrimonial
+- Cargo: ${cargo}
 - Escritório: ${p.nomeMarca}
 - Email: ${p.email}
 - Telefone/WhatsApp: ${p.celular}
@@ -1900,7 +2036,7 @@ function handleFotoCorpUpload(input, pid, sid) {
 }
 
 async function animateFotoCorp(pid, sid) {
-  const p = S.parceiros.find(x => x.id === pid);
+  const p = gp(pid);
   if (!p) return;
   const rKey = pid + '_' + sid;
   const fotoData = S.fotoCorpInput && S.fotoCorpInput[pid];
@@ -2106,7 +2242,12 @@ async function animatePublish(pid) {
   const vercelProject = `awt-${slug}`;
 
   const setStep = s => { S.pubSt = s; render(); };
-  const fail = msg => { S.pubSt = 'error'; S.pubError = msg; render(); };
+  const fail = (msg, step = 'publicar') => {
+    S.pubSt = 'error'; S.pubError = msg; render();
+    if (p.partnerId) {
+      postBrandEvent({ type: 'brand.failed', partnerId: p.partnerId, step, error: msg }).catch(() => {});
+    }
+  };
 
   // ── STEP 0: push index.html no GitHub ──
   setStep(0);
@@ -2132,8 +2273,8 @@ async function animatePublish(pid) {
       headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (!pushRes.ok) { const e = await pushRes.json(); fail(`GitHub: ${e.message}`); return; }
-  } catch(e) { fail(`GitHub error: ${e.message}`); return; }
+    if (!pushRes.ok) { const e = await pushRes.json(); fail(`GitHub: ${e.message}`, 'github'); return; }
+  } catch(e) { fail(`GitHub error: ${e.message}`, 'github'); return; }
 
   // push logo.svg se existir
   if (logoSvg) {
@@ -2303,6 +2444,200 @@ function downloadSvg(key) {
   a.href = URL.createObjectURL(b);
   a.download = key + '.svg';
   a.click();
+}
+
+// ═══════════════════════════════════════════════
+// INTEGRAÇÃO AWT — UTILITÁRIOS
+// ═══════════════════════════════════════════════
+
+function genUuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+function awtHeaders() {
+  return { 'X-Brand-Key': S.awtIntKey, 'Content-Type': 'application/json' };
+}
+
+async function postBrandEvent(payload) {
+  if (!S.awtIntUrl || !S.awtIntKey) return;
+  const event = { event_id: genUuid(), occurred_at: new Date().toISOString(), operator: S.operEmail || S.awtIntKey, ...payload };
+  const res = await fetch(`${S.awtIntUrl}/internal/brand/events`, {
+    method: 'POST', headers: awtHeaders(), body: JSON.stringify(event)
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json().catch(() => ({}));
+}
+
+function hashSlug(slug) {
+  let h = 0;
+  for (let i = 0; i < slug.length; i++) h = Math.imul(31, h) + slug.charCodeAt(i) | 0;
+  return Math.abs(h) % 1000000 + 10000;
+}
+
+async function loadQueue() {
+  if (!S.awtIntUrl || !S.awtIntKey) return;
+  try {
+    const res = await fetch(`${S.awtIntUrl}/internal/brand/queue`, { headers: awtHeaders() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    list.forEach(ap => {
+      const pId = typeof ap.id === 'number' ? ap.id : hashSlug(ap.slug || ap.partnerId || String(Math.random()));
+      const mapped = {
+        id: pId,
+        slug: ap.slug,
+        nomeMarca: ap.nomeMarca,
+        nomeBanker: ap.nomeBanker,
+        primeiroNome: ap.primeiroNome || ap.nomeBanker.split(' ')[0],
+        cargo: ap.cargo || 'Planejador Patrimonial',
+        email: ap.email,
+        celular: ap.celular,
+        corHex: ap.corHex,
+        corSecundariaHex: ap.corSecundariaHex || null,
+        corAcentoHex: ap.corAcentoHex || null,
+        fonte: ap.fonte || 'sans',
+        estiloTipografico: ap.estiloTipografico || null,
+        especialidades: ap.especialidades || [],
+        ativos: ap.servicos || ap.ativos || ['site'],
+        ticket: ap.ticketMedio || '',
+        publicoAlvo: ap.publicoAlvo || '',
+        valores: ap.valores || '',
+        visao: ap.visao || '',
+        missao: ap.missao || '',
+        slogan: ap.slogan || '',
+        diferenciais: ap.diferenciais || '',
+        dataEntrada: new Date().toLocaleDateString('pt-BR'),
+        partnerId: ap.partnerId || ap.id,
+        logoUrl: ap.logoUrl || null,
+        fotoUrl: ap.fotoUrl || null,
+        status: ap.status || 'queued',
+        ajusteComentario: ap.ajusteComentario || null,
+        _fromApi: true,
+      };
+      // Pré-carrega logo se vier da API
+      if (mapped.logoUrl && !S.results[pId + '_logo']) {
+        fetch(mapped.logoUrl).then(r => r.text()).then(svg => {
+          if (svg.trim().startsWith('<svg')) {
+            S.results[pId + '_logo'] = svg;
+            S.logoApproved = S.logoApproved || {};
+            S.logoApproved[pId] = true;
+            sst(pId, 'logo', 'done');
+            lsSet('awt_results', S.results);
+          }
+        }).catch(()=>{});
+      }
+      // Pré-carrega fotoUrl em fotoCorpInput (expira em 1h, baixar logo)
+      if (mapped.fotoUrl) {
+        fetch(mapped.fotoUrl).then(r => r.blob()).then(blob => {
+          return new Promise(res => {
+            const reader = new FileReader();
+            reader.onload = e => res(e.target.result);
+            reader.readAsDataURL(blob);
+          });
+        }).then(dataUrl => {
+          S.fotoCorpInput = S.fotoCorpInput || {};
+          S.fotoCorpInput[pId] = { dataUrl, mime: 'image/png', name: 'foto-banker.png' };
+        }).catch(()=>{});
+      }
+      const idx = PARTNERS.findIndex(x => x.partnerId === mapped.partnerId || x.slug === mapped.slug);
+      if (idx >= 0) { mapped.id = PARTNERS[idx].id; PARTNERS[idx] = mapped; }
+      else PARTNERS.push(mapped);
+    });
+    render();
+  } catch(e) {
+    alert('Erro ao carregar fila: ' + e.message);
+  }
+}
+
+async function animateEntrega(pid) {
+  const p = gp(pid);
+  if (!p) throw new Error('Parceiro não encontrado');
+  if (!S.awtIntUrl || !S.awtIntKey) throw new Error('Integração não configurada');
+
+  const log = document.getElementById('entrega-log');
+  const errBox = document.getElementById('entrega-error');
+  const prog = document.getElementById('entrega-progress');
+  if (prog) prog.style.display = 'block';
+  if (errBox) errBox.style.display = 'none';
+  const addLog = msg => { if (log) log.innerHTML += `<div>${msg}</div>`; };
+
+  const pubUrl = S.pubUrl || `https://${p.slug}.vercel.app`;
+  const ghUrl = `https://github.com/awt-mkt-hub/awt-mkt-hub.github.io/tree/main/${p.slug}`;
+
+  // Build files list from results
+  const fileKinds = [
+    { kind: 'logo_svg',    key: p.id + '_logo',          contentType: 'image/svg+xml' },
+    { kind: 'cartao_pdf',  key: p.id + '_cartao',         contentType: 'text/html' },
+    { kind: 'timbrado_pdf',key: p.id + '_papelTimbrado',  contentType: 'text/html' },
+    { kind: 'site_html',   key: p.id + '_site',           contentType: 'text/html' },
+    { kind: 'foto_png',    key: p.id + '_fotoCorp',       contentType: 'image/png', isDataUrl: true },
+  ].filter(f => !!S.results[f.key]);
+
+  const uploadedFiles = [];
+
+  for (const f of fileKinds) {
+    addLog(`⟳ Preparando ${f.kind}…`);
+    const content = S.results[f.key];
+    let blob;
+    if (f.isDataUrl && content.startsWith('data:')) {
+      const b64 = content.split(',')[1];
+      const bytes = atob(b64);
+      const arr = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      blob = new Blob([arr], { type: f.contentType });
+    } else {
+      blob = new Blob([content], { type: f.contentType });
+    }
+
+    addLog(`⟳ Solicitando URL de upload para ${f.kind}…`);
+    const urlRes = await fetch(`${S.awtIntUrl}/internal/brand/upload-url`, {
+      method: 'POST', headers: awtHeaders(),
+      body: JSON.stringify({ partnerId: p.partnerId, kind: f.kind, filename: `${p.slug}-${f.kind}`, content_type: f.contentType, size_bytes: blob.size })
+    });
+    if (!urlRes.ok) throw new Error(`upload-url falhou (${f.kind}): HTTP ${urlRes.status}`);
+    const { file_id, upload_url } = await urlRes.json();
+
+    addLog(`⟳ Enviando ${f.kind} (${Math.round(blob.size/1024)}KB)…`);
+    const putRes = await fetch(upload_url, { method: 'PUT', body: blob, headers: { 'Content-Type': f.contentType } });
+    if (!putRes.ok) throw new Error(`Upload falhou (${f.kind}): HTTP ${putRes.status}`);
+    uploadedFiles.push({ kind: f.kind, file_id });
+    addLog(`✓ ${f.kind} enviado`);
+  }
+
+  addLog(`⟳ Registrando entrega…`);
+  const version = (S.deliveryVersion[pid] || 0) + 1;
+
+  // Checklist from checkboxes
+  const getChk = id => !!(document.getElementById(id) && document.getElementById(id).checked);
+  const checklist = {
+    nome_marca: getChk('ec1'),
+    cor_primaria: getChk('ec2'),
+    whatsapp: getChk('ec3'),
+    disclaimer: getChk('ec4'),
+    sem_palavras_proibidas: getChk('ec5'),
+    especialidades: getChk('ec6'),
+  };
+
+  await postBrandEvent({
+    type: 'brand.delivered',
+    partnerId: p.partnerId,
+    version,
+    site: { slug: p.slug, pubUrl, githubUrl: ghUrl },
+    files: uploadedFiles,
+    checklist,
+    notes: '',
+  });
+
+  addLog(`✅ Entregue com sucesso — versão ${version}`);
+
+  S.deliveryVersion[pid] = version;
+  lsSet('awt_delivery_version', S.deliveryVersion);
+  const now = new Date();
+  const ts = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  S.results[pid + '_entrega_sent'] = true;
+  S.results[pid + '_entrega_sent_at'] = ts;
 }
 
 // ═══════════════════════════════════════════════

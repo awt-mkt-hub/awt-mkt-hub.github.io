@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWT Brand Ops</title>
+<style>
+  :root {
+    --bg: #0d0d1a;
+    --bg2: #13131f;
+    --bg3: #1a1a2e;
+    --border: #2a2a4a;
+    --purple: #7c3aed;
+    --purple-light: #a855f7;
+    --purple-dim: #3b1d6e;
+    --green: #10b981;
+    --green-dim: #064e3b;
+    --yellow: #f59e0b;
+    --yellow-dim: #451a03;
+    --red: #ef4444;
+    --red-dim: #450a0a;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --white: #ffffff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--white);
+  }
+
+  .logo svg { flex-shrink: 0; }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .operator-select {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .operator-select:focus { border-color: var(--purple); }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+    white-space: nowrap;
+  }
+
+  .btn:hover { opacity: .85; }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .btn-primary { background: var(--purple); color: #fff; }
+  .btn-success { background: var(--green); color: #fff; }
+  .btn-warning { background: var(--yellow); color: #000; }
+  .btn-danger  { background: var(--red); color: #fff; }
+  .btn-ghost   { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    min-height: calc(100vh - 57px);
+  }
+
+  .main-panel {
+    padding: 24px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+
+  .side-panel {
+    padding: 24px;
+    overflow-y: auto;
+    background: var(--bg2);
+  }
+
+  /* ── Section headers ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    background: var(--purple-dim);
+    color: var(--purple-light);
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* ── Partner cards ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: border-color .15s;
+  }
+
+  .card:hover { border-color: var(--purple-dim); }
+
+  .card-header {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-header:hover { background: rgba(124,58,237,.05); }
+
+  .card-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--purple-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--purple-light);
+    flex-shrink: 0;
+  }
+
+  .card-info { flex: 1; min-width: 0; }
+
+  .card-name {
+    font-weight: 600;
+    color: var(--white);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .card-status {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .status-pending  { background: var(--muted); }
+  .status-started  { background: var(--yellow); }
+  .status-uploading { background: var(--purple-light); }
+  .status-ready    { background: var(--green); }
+  .status-delivered { background: var(--green); }
+  .status-failed   { background: var(--red); }
+
+  .status-label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .chevron {
+    color: var(--muted);
+    transition: transform .2s;
+    flex-shrink: 0;
+  }
+
+  .chevron.open { transform: rotate(90deg); }
+
+  /* ── Card body ── */
+  .card-body {
+    display: none;
+    padding: 0 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .card-body.open { display: block; }
+
+  /* Steps */
+  .steps {
+    display: flex;
+    gap: 0;
+    margin: 16px 0;
+  }
+
+  .step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: calc(50% + 14px);
+    right: calc(-50% + 14px);
+    height: 2px;
+    background: var(--border);
+  }
+
+  .step.done:not(:last-child)::after { background: var(--purple); }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    z-index: 1;
+  }
+
+  .step.done .step-num { background: var(--purple); border-color: var(--purple); color: #fff; }
+  .step.active .step-num { border-color: var(--purple-light); color: var(--purple-light); }
+
+  .step-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+    text-align: center;
+  }
+
+  .step.done .step-label { color: var(--purple-light); }
+  .step.active .step-label { color: var(--text); }
+
+  /* File upload grid */
+  .files-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 12px 0;
+  }
+
+  .file-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: border-color .15s;
+  }
+
+  .file-item.uploaded { border-color: var(--green); background: rgba(16,185,129,.05); }
+  .file-item.required-label { font-size: 11px; color: var(--muted); }
+
+  .file-kind {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .file-kind .req { color: var(--red); font-size: 10px; }
+  .file-kind .opt { color: var(--muted); font-size: 10px; }
+
+  .file-input-wrap {
+    position: relative;
+  }
+
+  .file-input-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--muted);
+    transition: border-color .15s;
+  }
+
+  .file-input-label:hover { border-color: var(--purple); color: var(--text); }
+
+  .file-input-label.has-file { border-style: solid; border-color: var(--green); color: var(--green); }
+
+  .file-input-real {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .file-progress {
+    font-size: 11px;
+    color: var(--muted);
+    display: none;
+  }
+
+  .file-progress.uploading { display: block; color: var(--purple-light); }
+  .file-progress.done { display: block; color: var(--green); }
+  .file-progress.error { display: block; color: var(--red); }
+
+  /* Action row */
+  .action-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Fail modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    width: 440px;
+    max-width: 90vw;
+  }
+
+  .modal h3 { font-size: 16px; color: var(--white); margin-bottom: 16px; }
+
+  .form-group { margin-bottom: 14px; }
+
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .form-input, .form-select, .form-textarea {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 12px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
+
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--purple); }
+  .form-textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+  .form-select { cursor: pointer; }
+
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+  /* ── Deliveries side panel ── */
+  .delivery-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+
+  .delivery-name {
+    font-weight: 600;
+    color: var(--white);
+    font-size: 13px;
+  }
+
+  .delivery-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .tag-green  { background: var(--green-dim);  color: var(--green); }
+  .tag-red    { background: var(--red-dim);    color: var(--red); }
+  .tag-yellow { background: var(--yellow-dim); color: var(--yellow); }
+  .tag-purple { background: var(--purple-dim); color: var(--purple-light); }
+
+  /* ── Toast ── */
+  #toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .toast {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    max-width: 340px;
+    animation: slideIn .2s ease;
+    pointer-events: auto;
+  }
+
+  .toast-success { background: var(--green); color: #fff; }
+  .toast-error   { background: var(--red); color: #fff; }
+  .toast-info    { background: var(--purple); color: #fff; }
+
+  @keyframes slideIn { from { transform: translateX(60px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes fadeOut { to { opacity: 0; } }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+  }
+
+  .empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+  /* ── Spinner ── */
+  .spin {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: rotate .6s linear infinite;
+  }
+
+  @keyframes rotate { to { transform: rotate(360deg); } }
+
+  /* ── Service chips ── */
+  .service-chip {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .service-chip.fotos-ai { border-color: var(--yellow); color: var(--yellow); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    .layout { grid-template-columns: 1fr; }
+    .side-panel { border-top: 1px solid var(--border); }
+    .files-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="6" fill="#7c3aed"/>
+      <path d="M14 6L6 20h4.5L14 13.5 17.5 20H22L14 6z" fill="white"/>
+    </svg>
+    AWT Brand Ops
+  </div>
+  <div class="header-right">
+    <select class="operator-select" id="operatorSelect" onchange="onOperatorChange()">
+      <option value="thiago">Thiago Befi</option>
+      <option value="franca">França Lauria</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="loadAll()">
+      ↻ Atualizar
+    </button>
+  </div>
+</header>
+
+<!-- Layout -->
+<div class="layout">
+  <!-- Main: Fila -->
+  <div class="main-panel">
+    <div class="section-header">
+      <div class="section-title">
+        📋 Fila de Branding
+        <span class="badge" id="queueBadge">–</span>
+      </div>
+    </div>
+    <div id="queueList">
+      <div class="empty"><div class="empty-icon">⏳</div>Carregando fila...</div>
+    </div>
+  </div>
+
+  <!-- Side: Entregas -->
+  <div class="side-panel">
+    <div class="section-header">
+      <div class="section-title">
+        ✅ Entregas Recentes
+        <span class="badge" id="deliveriesBadge">–</span>
+      </div>
+    </div>
+    <div id="deliveriesList">
+      <div class="empty"><div class="empty-icon">📦</div>Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Fail Modal -->
+<div class="modal-overlay" id="failModal">
+  <div class="modal">
+    <h3>⚠️ Registrar Falha</h3>
+    <input type="hidden" id="failPartnerId">
+    <input type="hidden" id="failSlug">
+    <div class="form-group">
+      <label class="form-label">Etapa onde falhou</label>
+      <select class="form-select" id="failStep">
+        <option value="logo">Logo</option>
+        <option value="papelaria">Papelaria</option>
+        <option value="site">Site</option>
+        <option value="foto">Foto</option>
+        <option value="upload">Upload de arquivos</option>
+        <option value="entrega">Entrega final</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descrição do erro</label>
+      <textarea class="form-textarea" id="failError" placeholder="Descreva o que aconteceu..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeFailModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="submitFail()">Registrar Falha</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const API_BASE = 'https://awt-onboarding-services-365707580016.us-central1.run.app';
+
+const OPERATORS = {
+  thiago: {
+    name: 'Thiago Befi',
+    email: 'thiago.befi@awtgroup.com.br',
+    key: '52af4aa0657d96cf87218d7124bfee6aa0b69ad54f70564594181c6c5eebe5be'
+  },
+  franca: {
+    name: 'França Lauria',
+    email: 'franca.lauria@awtgroup.com.br',
+    key: 'b9871a1a22a0d9cc74fadb6026c534848e8099953056253388170a2a249e1d8b'
+  }
+};
+
+const REQUIRED_KINDS = ['logo_png', 'logo_branco_png', 'cartao_pdf', 'timbrado_pdf', 'site_html'];
+const OPTIONAL_KINDS = ['logo_svg'];
+const CONDITIONAL_KINDS = ['foto_png']; // only when fotos-ai in services
+
+const KIND_LABELS = {
+  logo_png: 'Logo PNG',
+  logo_branco_png: 'Logo Branco PNG',
+  logo_svg: 'Logo SVG',
+  cartao_pdf: 'Cartão PDF',
+  timbrado_pdf: 'Timbrado PDF',
+  site_html: 'Site HTML',
+  foto_png: 'Foto PNG'
+};
+
+const KIND_ACCEPT = {
+  logo_png: '.png,image/png',
+  logo_branco_png: '.png,image/png',
+  logo_svg: '.svg,image/svg+xml',
+  cartao_pdf: '.pdf,application/pdf',
+  timbrado_pdf: '.pdf,application/pdf',
+  site_html: '.html,text/html',
+  foto_png: '.png,image/png'
+};
+
+// ── State ────────────────────────────────────────────────────────────────────
+const STATE_KEY = 'awt_brand_ops_v1';
+
+function getState() {
+  try { return JSON.parse(localStorage.getItem(STATE_KEY) || '{}'); } catch { return {}; }
+}
+
+function getPartnerState(slug) {
+  return getState()[slug] || { step: 0, version: 1, files: {}, status: 'pending' };
+  // step: 0=not started, 1=started, 2=uploading, 3=ready to deliver, 4=delivered, -1=failed
+}
+
+function savePartnerState(slug, updates) {
+  const s = getState();
+  s[slug] = { ...getPartnerState(slug), ...updates };
+  localStorage.setItem(STATE_KEY, JSON.stringify(s));
+}
+
+function currentOperator() {
+  return OPERATORS[document.getElementById('operatorSelect').value];
+}
+
+function onOperatorChange() {
+  loadAll();
+}
+
+// ── API helpers ──────────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const op = currentOperator();
+  const res = await fetch(API_BASE + path, {
+    ...opts,
+    headers: {
+      'X-Brand-Key': op.key,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {})
+    }
+  });
+  if (!res.ok) {
+    let body = '';
+    try { body = JSON.stringify(await res.json()); } catch {}
+    throw new Error(`HTTP ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
+function uuid() {
+  return crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+}
+
+function isoNow() {
+  return new Date().toISOString().slice(0, 19) + 'Z';
+}
+
+// ── Load ─────────────────────────────────────────────────────────────────────
+let queueData = [];
+
+async function loadAll() {
+  loadQueue();
+  loadDeliveries();
+}
+
+async function loadQueue() {
+  const el = document.getElementById('queueList');
+  el.innerHTML = '<div class="empty"><div class="spin"></div></div>';
+  try {
+    const data = await apiFetch('/internal/brand/queue');
+    const items = Array.isArray(data) ? data : (data.queue || data.items || []);
+    queueData = items;
+    document.getElementById('queueBadge').textContent = items.length;
+    if (!items.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div>Fila vazia — tudo entregue!</div>';
+      return;
+    }
+    el.innerHTML = items.map(renderQueueCard).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">❌</div>${e.message}</div>`;
+  }
+}
+
+async function loadDeliveries() {
+  const el = document.getElementById('deliveriesList');
+  el.innerHTML = '<div class="empty"><div class="spin"></div></div>';
+  try {
+    const data = await apiFetch('/internal/brand/deliveries?dias=14');
+    const items = Array.isArray(data) ? data : (data.deliveries || data.items || []);
+    document.getElementById('deliveriesBadge').textContent = items.length;
+    if (!items.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>Sem entregas nos últimos 14 dias</div>';
+      return;
+    }
+    el.innerHTML = items.map(renderDelivery).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">❌</div>${e.message}</div>`;
+  }
+}
+
+// ── Render Queue Card ─────────────────────────────────────────────────────────
+function renderQueueCard(item) {
+  const slug = item.slug || item.partnerId || item.id || '';
+  const name = item.nome || item.name || item.partnerName || slug;
+  const partnerId = item.partnerId || item.id || slug;
+  const services = item.servicos || item.services || [];
+  const hasFotos = Array.isArray(services) && services.some(s => String(s).includes('foto'));
+  const entradaAt = item.created_at || item.entradaAt || item.createdAt || '';
+
+  const ps = getPartnerState(slug);
+
+  const statusMap = {
+    pending:   { label: 'Aguardando',  cls: 'status-pending' },
+    started:   { label: 'Em andamento', cls: 'status-started' },
+    uploading: { label: 'Uploading',   cls: 'status-uploading' },
+    ready:     { label: 'Pronto p/ entregar', cls: 'status-ready' },
+    delivered: { label: 'Entregue',    cls: 'status-delivered' },
+    failed:    { label: 'Falha',       cls: 'status-failed' }
+  };
+  const st = statusMap[ps.status] || statusMap.pending;
+
+  const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
+  const chips = Array.isArray(services) ? services.map(s =>
+    `<span class="service-chip ${String(s).includes('foto') ? 'fotos-ai' : ''}">${s}</span>`
+  ).join('') : '';
+
+  const dateStr = entradaAt ? new Date(entradaAt).toLocaleDateString('pt-BR') : '';
+
+  return `
+  <div class="card" id="card-${slug}">
+    <div class="card-header" onclick="toggleCard('${slug}')">
+      <div class="card-avatar">${initials}</div>
+      <div class="card-info">
+        <div class="card-name">${name}</div>
+        <div class="card-meta">
+          <span>🔗 ${slug}</span>
+          ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
+          ${chips}
+        </div>
+      </div>
+      <div class="card-status">
+        <div class="status-dot ${st.cls}"></div>
+        <span class="status-label">${st.label}</span>
+      </div>
+      <svg class="chevron" id="chev-${slug}" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="card-body" id="body-${slug}">
+      ${renderCardBody(slug, partnerId, name, hasFotos, ps)}
+    </div>
+  </div>`;
+}
+
+function renderCardBody(slug, partnerId, name, hasFotos, ps) {
+  const step0done = ps.status !== 'pending';
+  const step1done = ['uploading','ready','delivered'].includes(ps.status);
+  const step2done = ['delivered'].includes(ps.status);
+
+  // Required files for this partner
+  const requiredForThis = [...REQUIRED_KINDS, ...(hasFotos ? CONDITIONAL_KINDS : [])];
+  const allRequired = requiredForThis.every(k => ps.files[k]);
+
+  const filesHtml = [...requiredForThis, ...OPTIONAL_KINDS].map(kind => {
+    const isRequired = requiredForThis.includes(kind);
+    const hasFile = !!ps.files[kind];
+    return `
+    <div class="file-item ${hasFile ? 'uploaded' : ''}" id="file-item-${slug}-${kind}">
+      <div class="file-kind">
+        ${KIND_LABELS[kind]}
+        <span class="${isRequired ? 'req' : 'opt'}">${isRequired ? '✱' : 'opc'}</span>
+        ${hasFile ? '✓' : ''}
+      </div>
+      <div class="file-input-wrap">
+        <label class="file-input-label ${hasFile ? 'has-file' : ''}" id="file-label-${slug}-${kind}">
+          <span id="file-label-text-${slug}-${kind}">${hasFile ? '✓ Enviado' : '+ Selecionar'}</span>
+          <input class="file-input-real" type="file" accept="${KIND_ACCEPT[kind]}"
+            onchange="onFileSelected('${slug}','${partnerId}','${kind}',this)"
+            ${ps.status === 'delivered' ? 'disabled' : ''}>
+        </label>
+      </div>
+      <div class="file-progress" id="file-prog-${slug}-${kind}"></div>
+    </div>`;
+  }).join('');
+
+  const canStart    = ps.status === 'pending';
+  const canDeliver  = ps.status !== 'delivered' && ps.status !== 'failed' && allRequired && ps.status !== 'pending';
+  const canFail     = ps.status !== 'pending' && ps.status !== 'delivered';
+
+  return `
+  <div class="steps">
+    <div class="step ${step0done ? 'done' : 'active'}">
+      <div class="step-num">${step0done ? '✓' : '1'}</div>
+      <div class="step-label">Iniciar</div>
+    </div>
+    <div class="step ${step1done ? 'done' : (step0done ? 'active' : '')}">
+      <div class="step-num">${step1done ? '✓' : '2'}</div>
+      <div class="step-label">Upload</div>
+    </div>
+    <div class="step ${step2done ? 'done' : (step1done ? 'active' : '')}">
+      <div class="step-num">${step2done ? '✓' : '3'}</div>
+      <div class="step-label">Entregar</div>
+    </div>
+  </div>
+
+  <div class="files-grid">${filesHtml}</div>
+
+  <div class="action-row">
+    ${canStart ? `
+    <button class="btn btn-primary btn-sm" onclick="startPartner('${slug}','${partnerId}','${name}')">
+      ▶ Iniciar Briefing
+    </button>` : ''}
+    ${canDeliver ? `
+    <button class="btn btn-success btn-sm" onclick="deliverPartner('${slug}','${partnerId}')">
+      🚀 Entregar
+    </button>` : ''}
+    ${canFail ? `
+    <button class="btn btn-danger btn-sm" onclick="openFailModal('${slug}','${partnerId}')">
+      ⚠️ Registrar Falha
+    </button>` : ''}
+    ${ps.status === 'delivered' ? `<span style="color:var(--green);font-size:13px;font-weight:600">✅ Entregue!</span>` : ''}
+    ${ps.status === 'failed' ? `<span style="color:var(--red);font-size:13px;font-weight:600">❌ Falha registrada</span>` : ''}
+  </div>`;
+}
+
+function refreshCard(slug) {
+  const item = queueData.find(i => (i.slug || i.partnerId || i.id) === slug);
+  if (!item) return;
+  const partnerId = item.partnerId || item.id || slug;
+  const name = item.nome || item.name || item.partnerName || slug;
+  const services = item.servicos || item.services || [];
+  const hasFotos = Array.isArray(services) && services.some(s => String(s).includes('foto'));
+  const ps = getPartnerState(slug);
+  const body = document.getElementById(`body-${slug}`);
+  if (body) body.innerHTML = renderCardBody(slug, partnerId, name, hasFotos, ps);
+
+  // Update status dot
+  const st = { label: '', cls: '' };
+  const statusMap = {
+    pending:   { label: 'Aguardando',  cls: 'status-pending' },
+    started:   { label: 'Em andamento', cls: 'status-started' },
+    uploading: { label: 'Uploading',   cls: 'status-uploading' },
+    ready:     { label: 'Pronto p/ entregar', cls: 'status-ready' },
+    delivered: { label: 'Entregue',    cls: 'status-delivered' },
+    failed:    { label: 'Falha',       cls: 'status-failed' }
+  };
+  const s = statusMap[ps.status] || statusMap.pending;
+  const dot = document.querySelector(`#card-${slug} .status-dot`);
+  const lbl = document.querySelector(`#card-${slug} .status-label`);
+  if (dot) dot.className = `status-dot ${s.cls}`;
+  if (lbl) lbl.textContent = s.label;
+}
+
+function toggleCard(slug) {
+  const body = document.getElementById(`body-${slug}`);
+  const chev = document.getElementById(`chev-${slug}`);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+
+// ── Deliveries ───────────────────────────────────────────────────────────────
+function renderDelivery(item) {
+  const name = item.partnerName || item.nome || item.slug || item.partnerId || '–';
+  const type = item.type || item.status || 'brand.delivered';
+  const at = item.occurred_at || item.created_at || item.deliveredAt || '';
+  const dateStr = at ? new Date(at).toLocaleDateString('pt-BR') : '';
+  const isDelivered = type.includes('delivered');
+  const isFailed = type.includes('failed');
+
+  return `
+  <div class="delivery-card">
+    <div class="delivery-name">${name}</div>
+    <div class="delivery-meta">
+      <span>${dateStr}</span>
+      <span class="tag ${isDelivered ? 'tag-green' : isFailed ? 'tag-red' : 'tag-purple'}">
+        ${isDelivered ? '✓ Entregue' : isFailed ? '✗ Falha' : type}
+      </span>
+    </div>
+  </div>`;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function startPartner(slug, partnerId, name) {
+  const op = currentOperator();
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Enviando...';
+
+  try {
+    const payload = {
+      event_id: uuid(),
+      type: 'brand.started',
+      partnerId,
+      operator: op.email,
+      occurred_at: isoNow(),
+      version: 1
+    };
+    const res = await apiFetch('/internal/brand/events', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (res.duplicate) {
+      toast('info', 'Evento já registrado anteriormente');
+    } else {
+      toast('success', `✓ Briefing iniciado para ${name}`);
+    }
+    savePartnerState(slug, { status: 'started', version: 1 });
+    refreshCard(slug);
+  } catch (e) {
+    toast('error', e.message);
+    btn.disabled = false;
+    btn.innerHTML = '▶ Iniciar Briefing';
+  }
+}
+
+async function onFileSelected(slug, partnerId, kind, input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const progEl = document.getElementById(`file-prog-${slug}-${kind}`);
+  const labelEl = document.getElementById(`file-label-${slug}-${kind}`);
+  const labelTextEl = document.getElementById(`file-label-text-${slug}-${kind}`);
+  const itemEl = document.getElementById(`file-item-${slug}-${kind}`);
+
+  progEl.className = 'file-progress uploading';
+  progEl.textContent = 'Solicitando URL...';
+  input.disabled = true;
+
+  try {
+    // Step 1: request upload URL
+    const op = currentOperator();
+    const urlRes = await apiFetch('/internal/brand/upload-url', {
+      method: 'POST',
+      body: JSON.stringify({
+        partnerId,
+        kind,
+        filename: file.name,
+        content_type: file.type || 'application/octet-stream',
+        size_bytes: file.size
+      })
+    });
+
+    const { file_id, upload_url, headers: uploadHeaders } = urlRes;
+
+    progEl.textContent = 'Enviando arquivo...';
+
+    // Step 2: PUT file bytes
+    const putRes = await fetch(upload_url, {
+      method: 'PUT',
+      headers: { 'Content-Type': uploadHeaders['Content-Type'] || file.type },
+      body: file
+    });
+
+    if (!putRes.ok) throw new Error(`Upload falhou: HTTP ${putRes.status}`);
+
+    // Save file_id
+    const ps = getPartnerState(slug);
+    const newFiles = { ...ps.files, [kind]: file_id };
+    const requiredForThis = [...REQUIRED_KINDS];
+    // check if fotos needed
+    const item = queueData.find(i => (i.slug || i.partnerId || i.id) === slug);
+    if (item) {
+      const services = item.servicos || item.services || [];
+      if (Array.isArray(services) && services.some(s => String(s).includes('foto'))) {
+        requiredForThis.push('foto_png');
+      }
+    }
+    const allUploaded = requiredForThis.every(k => newFiles[k]);
+    const newStatus = allUploaded ? 'ready' : 'uploading';
+    savePartnerState(slug, { files: newFiles, status: newStatus });
+
+    progEl.className = 'file-progress done';
+    progEl.textContent = `✓ ${(file.size / 1024).toFixed(0)} KB`;
+    labelEl.classList.add('has-file');
+    labelTextEl.textContent = '✓ Enviado';
+    itemEl.classList.add('uploaded');
+
+    if (allUploaded) {
+      toast('success', 'Todos os arquivos enviados! Pronto para entregar.');
+    } else {
+      toast('info', `${KIND_LABELS[kind]} enviado`);
+    }
+
+    refreshCard(slug);
+  } catch (e) {
+    progEl.className = 'file-progress error';
+    progEl.textContent = `✗ ${e.message}`;
+    input.disabled = false;
+    toast('error', e.message);
+  }
+}
+
+async function deliverPartner(slug, partnerId) {
+  const ps = getPartnerState(slug);
+  const op = currentOperator();
+  const item = queueData.find(i => (i.slug || i.partnerId || i.id) === slug);
+  if (!item) return;
+
+  // Build files array
+  const filesArr = Object.entries(ps.files).map(([kind, file_id]) => ({ kind, file_id }));
+
+  // Build site info — prompt if not in queue data
+  const pubUrl = item.pubUrl || item.siteUrl || `https://awt-mkt-hub.github.io/${slug}`;
+  const githubUrl = item.githubUrl || `https://github.com/ThiagoBAWT/${slug}`;
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Entregando...';
+
+  try {
+    const payload = {
+      event_id: uuid(),
+      type: 'brand.delivered',
+      partnerId,
+      operator: op.email,
+      occurred_at: isoNow(),
+      version: ps.version || 1,
+      site: { slug, pubUrl, githubUrl },
+      files: filesArr,
+      checklist: {},
+      notes: ''
+    };
+
+    const res = await apiFetch('/internal/brand/events', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    if (res.duplicate) {
+      toast('info', 'Entrega já registrada');
+    } else {
+      toast('success', '🚀 Entrega registrada com sucesso!');
+    }
+
+    savePartnerState(slug, { status: 'delivered', version: (ps.version || 1) + 1 });
+    refreshCard(slug);
+    setTimeout(loadDeliveries, 1000);
+  } catch (e) {
+    // Parse known errors
+    let msg = e.message;
+    if (msg.includes('version_mismatch')) msg = 'Conflito de versão — atualize a fila';
+    if (msg.includes('incomplete_delivery')) msg = 'Faltam arquivos obrigatórios';
+    toast('error', msg);
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Entregar';
+  }
+}
+
+// ── Fail modal ────────────────────────────────────────────────────────────────
+function openFailModal(slug, partnerId) {
+  document.getElementById('failPartnerId').value = partnerId;
+  document.getElementById('failSlug').value = slug;
+  document.getElementById('failError').value = '';
+  document.getElementById('failModal').classList.add('open');
+}
+
+function closeFailModal() {
+  document.getElementById('failModal').classList.remove('open');
+}
+
+async function submitFail() {
+  const slug = document.getElementById('failSlug').value;
+  const partnerId = document.getElementById('failPartnerId').value;
+  const step = document.getElementById('failStep').value;
+  const error = document.getElementById('failError').value.trim();
+  const op = currentOperator();
+  const ps = getPartnerState(slug);
+
+  if (!error) { toast('error', 'Descreva o erro'); return; }
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+
+  try {
+    const payload = {
+      event_id: uuid(),
+      type: 'brand.failed',
+      partnerId,
+      operator: op.email,
+      occurred_at: isoNow(),
+      version: ps.version || 1,
+      step,
+      error
+    };
+
+    await apiFetch('/internal/brand/events', { method: 'POST', body: JSON.stringify(payload) });
+    toast('success', 'Falha registrada');
+    savePartnerState(slug, { status: 'failed', version: (ps.version || 1) + 1 });
+    closeFailModal();
+    refreshCard(slug);
+  } catch (e) {
+    toast('error', e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Registrar Falha';
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(type, msg) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.animation = 'fadeOut .3s ease forwards';
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', loadAll);
+</script>
+</body>
+</html>

@@ -312,6 +312,10 @@
     margin: 12px 0;
   }
 
+  details summary::-webkit-details-marker { display:none; }
+  details > table td { padding: 4px 8px; border-bottom: 1px solid var(--border); vertical-align:top; color: var(--text); }
+  details > table td:first-child { color: var(--muted); white-space: nowrap; }
+
   .file-item {
     background: var(--bg3);
     border: 1px solid var(--border);
@@ -789,6 +793,10 @@ function renderQueueCard(item) {
   const entradaAt = item.created_at || item.entradaAt || item.createdAt || '';
   const apiStatus = item.status || '';
   const ajusteComentario = item.ajusteComentario || '';
+  const divisao = item.divisao || '';
+  const cidade = item.cidade || '';
+  const estado = item.estado || '';
+  const logoModo = item.logoModo || '';
 
   const ps = getPartnerState(slug);
 
@@ -822,6 +830,9 @@ function renderQueueCard(item) {
         <div class="card-meta">
           <span>🔗 ${slug}</span>
           ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
+          ${divisao ? `<span>🏢 ${divisao}</span>` : ''}
+          ${cidade ? `<span>📍 ${cidade}${estado ? '/' + estado : ''}</span>` : ''}
+          ${logoModo === 'criar' ? `<span style="color:#f59e0b;font-weight:600">🎨 Criar logo</span>` : logoModo === 'tenho' ? `<span style="color:#10b981">✓ Logo próprio</span>` : ''}
           ${chips}
         </div>
         ${ajusteComentario ? `<div style="margin-top:4px;font-size:11px;color:#f59e0b;padding:3px 6px;background:#451a03;border-radius:4px">⚠️ ${ajusteComentario}</div>` : ''}
@@ -835,12 +846,61 @@ function renderQueueCard(item) {
       </svg>
     </div>
     <div class="card-body" id="body-${slug}">
-      ${renderCardBody(slug, partnerId, name, hasFotos, ps)}
+      ${renderCardBody(slug, partnerId, name, hasFotos, ps, item)}
     </div>
   </div>`;
 }
 
-function renderCardBody(slug, partnerId, name, hasFotos, ps) {
+function renderCardBody(slug, partnerId, name, hasFotos, ps, item) {
+  item = item || {};
+  // Briefing info section
+  const cor1 = item.corHex ? `#${item.corHex}` : '';
+  const cor2 = item.corSecundariaHex ? `#${item.corSecundariaHex}` : '';
+  const cor3 = item.corAcentoHex ? `#${item.corAcentoHex}` : '';
+  const cores = [cor1, cor2, cor3].filter(Boolean);
+  const fonte = item.fonte || '';
+  const estilo = item.estiloTipografico || '';
+  const slogan = item.slogan || '';
+  const perfil = item.perfilProfissional || '';
+  const visao = item.visao || '';
+  const missao = item.missao || '';
+  const valores = item.valores || '';
+  const publico = item.publicoAlvo || '';
+  const diferenciais = item.diferenciais || '';
+  const especialidades = Array.isArray(item.especialidades) ? item.especialidades : [];
+  const focoProdutos = Array.isArray(item.focoProdutos) ? item.focoProdutos : [];
+  const dedicacao = item.dedicacao || '';
+  const ticket = item.ticketMedio || '';
+  const fotoTratamento = item.fotoTratamento || '';
+  const cargo = item.cargo || '';
+
+  const briefingRows = [
+    cargo ? `<tr><td>Cargo</td><td>${cargo}</td></tr>` : '',
+    dedicacao ? `<tr><td>Dedicação</td><td style="text-transform:capitalize">${dedicacao}</td></tr>` : '',
+    ticket ? `<tr><td>Ticket médio</td><td>${ticket}</td></tr>` : '',
+    fonte ? `<tr><td>Fonte</td><td>${fonte}${estilo ? ' · ' + estilo : ''}</td></tr>` : '',
+    cores.length ? `<tr><td>Cores</td><td>${cores.map(c=>`<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${c};margin-right:4px;vertical-align:middle;border:1px solid #ffffff20"></span>${c}`).join(' ')}</td></tr>` : '',
+    slogan ? `<tr><td>Slogan</td><td><em>${slogan}</em></td></tr>` : '',
+    publico ? `<tr><td>Público-alvo</td><td>${publico}</td></tr>` : '',
+    diferenciais ? `<tr><td>Diferenciais</td><td>${diferenciais}</td></tr>` : '',
+    especialidades.length ? `<tr><td>Especialidades</td><td>${especialidades.join(', ')}</td></tr>` : '',
+    focoProdutos.length ? `<tr><td>Foco produtos</td><td>${focoProdutos.join(', ')}</td></tr>` : '',
+    valores ? `<tr><td>Valores</td><td>${valores}</td></tr>` : '',
+    visao ? `<tr><td>Visão</td><td>${visao}</td></tr>` : '',
+    missao ? `<tr><td>Missão</td><td>${missao}</td></tr>` : '',
+    perfil ? `<tr><td>Bio/Sobre</td><td style="white-space:pre-wrap">${perfil}</td></tr>` : '',
+    fotoTratamento ? `<tr><td>Foto</td><td>${fotoTratamento === 'ia' ? '✅ Tratamento IA autorizado' : '📷 Original (sem IA)'}</td></tr>` : '',
+  ].filter(Boolean).join('');
+
+  const briefingHtml = briefingRows ? `
+  <details style="margin-bottom:12px">
+    <summary style="cursor:pointer;font-size:12px;color:var(--muted);padding:6px 0;user-select:none">📋 Ver briefing completo</summary>
+    <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px">
+      <colgroup><col style="width:120px"><col></colgroup>
+      ${briefingRows}
+    </table>
+  </details>` : '';
+
   const step0done = ps.status !== 'pending';
   const step1done = ['uploading','ready','delivered'].includes(ps.status);
   const step2done = ['delivered'].includes(ps.status);
@@ -891,6 +951,7 @@ function renderCardBody(slug, partnerId, name, hasFotos, ps) {
     </div>
   </div>
 
+  ${briefingHtml}
   <div class="files-grid">${filesHtml}</div>
 
   <div class="action-row">
@@ -920,7 +981,7 @@ function refreshCard(slug) {
   const hasFotos = Array.isArray(services) && services.some(s => String(s).includes('foto'));
   const ps = getPartnerState(slug);
   const body = document.getElementById(`body-${slug}`);
-  if (body) body.innerHTML = renderCardBody(slug, partnerId, name, hasFotos, ps);
+  if (body) body.innerHTML = renderCardBody(slug, partnerId, name, hasFotos, ps, item);
 
   // Update status dot
   const st = { label: '', cls: '' };

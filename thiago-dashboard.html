@@ -748,7 +748,7 @@ async function loadQueue() {
   el.innerHTML = '<div class="empty"><div class="spin"></div></div>';
   try {
     const data = await apiFetch('/internal/brand/queue');
-    const items = Array.isArray(data) ? data : (data.queue || data.items || []);
+    const items = Array.isArray(data) ? data : (data.partners || data.queue || data.items || []);
     queueData = items;
     document.getElementById('queueBadge').textContent = items.length;
     if (!items.length) {
@@ -781,21 +781,27 @@ async function loadDeliveries() {
 // ── Render Queue Card ─────────────────────────────────────────────────────────
 function renderQueueCard(item) {
   const slug = item.slug || item.partnerId || item.id || '';
-  const name = item.nome || item.name || item.partnerName || slug;
+  const name = item.nomeMarca || item.nome || item.name || item.partnerName || slug;
+  const banker = item.nomeBanker || item.primeiroNome || '';
   const partnerId = item.partnerId || item.id || slug;
   const services = item.servicos || item.services || [];
   const hasFotos = Array.isArray(services) && services.some(s => String(s).includes('foto'));
   const entradaAt = item.created_at || item.entradaAt || item.createdAt || '';
+  const apiStatus = item.status || '';
+  const ajusteComentario = item.ajusteComentario || '';
 
   const ps = getPartnerState(slug);
 
   const statusMap = {
-    pending:   { label: 'Aguardando',  cls: 'status-pending' },
-    started:   { label: 'Em andamento', cls: 'status-started' },
-    uploading: { label: 'Uploading',   cls: 'status-uploading' },
-    ready:     { label: 'Pronto p/ entregar', cls: 'status-ready' },
-    delivered: { label: 'Entregue',    cls: 'status-delivered' },
-    failed:    { label: 'Falha',       cls: 'status-failed' }
+    pending:         { label: 'Aguardando',       cls: 'status-pending' },
+    queued:          { label: 'Aguardando',       cls: 'status-pending' },
+    started:         { label: 'Em andamento',     cls: 'status-started' },
+    in_progress:     { label: 'Em andamento',     cls: 'status-started' },
+    uploading:       { label: 'Uploading',        cls: 'status-uploading' },
+    ready:           { label: 'Pronto p/ entregar', cls: 'status-ready' },
+    delivered:       { label: 'Entregue',         cls: 'status-delivered' },
+    ajuste_pedido:   { label: '⚠️ Ajuste pedido', cls: 'status-failed' },
+    failed:          { label: 'Falha',            cls: 'status-failed' }
   };
   const st = statusMap[ps.status] || statusMap.pending;
 
@@ -812,12 +818,13 @@ function renderQueueCard(item) {
     <div class="card-header" onclick="toggleCard('${slug}')">
       <div class="card-avatar">${initials}</div>
       <div class="card-info">
-        <div class="card-name">${name}</div>
+        <div class="card-name">${name}${banker && banker !== name ? ` <span style="font-weight:400;font-size:12px;opacity:.7">— ${banker}</span>` : ''}</div>
         <div class="card-meta">
           <span>🔗 ${slug}</span>
           ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
           ${chips}
         </div>
+        ${ajusteComentario ? `<div style="margin-top:4px;font-size:11px;color:#f59e0b;padding:3px 6px;background:#451a03;border-radius:4px">⚠️ ${ajusteComentario}</div>` : ''}
       </div>
       <div class="card-status">
         <div class="status-dot ${st.cls}"></div>
@@ -908,7 +915,7 @@ function refreshCard(slug) {
   const item = queueData.find(i => (i.slug || i.partnerId || i.id) === slug);
   if (!item) return;
   const partnerId = item.partnerId || item.id || slug;
-  const name = item.nome || item.name || item.partnerName || slug;
+  const name = item.nomeMarca || item.nome || item.name || item.partnerName || slug;
   const services = item.servicos || item.services || [];
   const hasFotos = Array.isArray(services) && services.some(s => String(s).includes('foto'));
   const ps = getPartnerState(slug);
@@ -941,7 +948,7 @@ function toggleCard(slug) {
 
 // ── Deliveries ───────────────────────────────────────────────────────────────
 function renderDelivery(item) {
-  const name = item.partnerName || item.nome || item.slug || item.partnerId || '–';
+  const name = item.nomeMarca || item.partnerName || item.nome || item.slug || item.partnerId || '–';
   const type = item.type || item.status || 'brand.delivered';
   const at = item.occurred_at || item.created_at || item.deliveredAt || '';
   const dateStr = at ? new Date(at).toLocaleDateString('pt-BR') : '';

@@ -2484,6 +2484,11 @@ async function loadQueue() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data.partners || data.queue || data.items || []);
+    if (!list.length) return;
+    // Remove entradas hardcoded (sem _fromApi) ao receber dados da API
+    for (let i = PARTNERS.length - 1; i >= 0; i--) {
+      if (!PARTNERS[i]._fromApi) PARTNERS.splice(i, 1);
+    }
     list.forEach(ap => {
       const pId = typeof ap.id === 'number' ? ap.id : hashSlug(ap.slug || ap.partnerId || String(Math.random()));
       const mapped = {

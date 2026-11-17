@@ -1260,7 +1260,11 @@ function toast(type, msg) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', loadAll);
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  // Auto-refresh a cada 2 minutos
+  setInterval(loadAll, 2 * 60 * 1000);
+});
 </script>
 </body>
 </html>

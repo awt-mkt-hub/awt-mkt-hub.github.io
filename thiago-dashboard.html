@@ -1041,8 +1041,7 @@ async function startPartner(slug, partnerId, name) {
       type: 'brand.started',
       partnerId,
       operator: op.email,
-      occurred_at: isoNow(),
-      version: 1
+      occurred_at: isoNow()
     };
     const res = await apiFetch('/internal/brand/events', {
       method: 'POST',
@@ -1163,7 +1162,6 @@ async function deliverPartner(slug, partnerId) {
       partnerId,
       operator: op.email,
       occurred_at: isoNow(),
-      version: ps.version || 1,
       site: { slug, pubUrl, githubUrl },
       files: filesArr,
       checklist: {},
@@ -1228,7 +1226,6 @@ async function submitFail() {
       partnerId,
       operator: op.email,
       occurred_at: isoNow(),
-      version: ps.version || 1,
       step,
       error
     };

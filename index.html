@@ -1261,7 +1261,7 @@ function rEntregar(p, step, si, steps) {
   const hasIntegration = !!(S.awtIntUrl && S.awtIntKey);
   const isEntregando = S.entregandoPid === p.id;
   const pubUrl = S.pubUrl || `https://${p.slug}.vercel.app`;
-  const ghUrl = `https://github.com/awt-mkt-hub/awt-mkt-hub.github.io/tree/main/${p.slug}`;
+  const ghUrl = `https://github.com/awt-mkt-hub/AWT-Onboarding/tree/main/${p.slug}`;
 
   // Build files list
   const files = [];
@@ -2557,6 +2557,29 @@ async function loadQueue() {
   }
 }
 
+
+async function svgToPngBlob(svgStr, w = 600, h = 300, whiteVersion = false) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    let svg = svgStr;
+    if (whiteVersion) {
+      svg = svg.replace(/fill="(?!none|transparent)[^"]+"/g, 'fill="white"').replace(/fill:#[0-9a-fA-F]{3,6}/g, 'fill:white').replace(/color:#[0-9a-fA-F]{3,6}/g, 'color:white');
+    }
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      if (whiteVersion) { ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, w, h); }
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      cv.toBlob(b => { if (b) resolve(b); else reject(new Error('canvas toBlob failed')); }, 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.src = url;
+  });
+}
 async function animateEntrega(pid) {
   const p = gp(pid);
   if (!p) throw new Error('Parceiro não encontrado');
@@ -2572,13 +2595,15 @@ async function animateEntrega(pid) {
   const pubUrl = S.pubUrl || `https://${p.slug}.vercel.app`;
   const ghUrl = `https://github.com/awt-mkt-hub/awt-mkt-hub.github.io/tree/main/${p.slug}`;
 
-  // Build files list from results
+  // Build files list — includes PNG versions derived from SVG logo
   const fileKinds = [
-    { kind: 'logo_svg',    key: p.id + '_logo',          contentType: 'image/svg+xml' },
-    { kind: 'cartao_pdf',  key: p.id + '_cartao',         contentType: 'text/html' },
-    { kind: 'timbrado_pdf',key: p.id + '_papelTimbrado',  contentType: 'text/html' },
-    { kind: 'site_html',   key: p.id + '_site',           contentType: 'text/html' },
-    { kind: 'foto_png',    key: p.id + '_fotoCorp',       contentType: 'image/png', isDataUrl: true },
+    { kind: 'logo_svg',      key: p.id + '_logo',          contentType: 'image/svg+xml' },
+    { kind: 'logo_png',      key: p.id + '_logo',          contentType: 'image/png',    isPng: true, whiteVersion: false },
+    { kind: 'logo_branco_png', key: p.id + '_logo',        contentType: 'image/png',    isPng: true, whiteVersion: true },
+    { kind: 'cartao_pdf',    key: p.id + '_cartao',         contentType: 'text/html' },
+    { kind: 'timbrado_pdf',  key: p.id + '_papelTimbrado',  contentType: 'text/html' },
+    { kind: 'site_html',     key: p.id + '_site',           contentType: 'text/html' },
+    { kind: 'foto_png',      key: p.id + '_fotoCorp',       contentType: 'image/png',    isDataUrl: true },
   ].filter(f => !!S.results[f.key]);
 
   const uploadedFiles = [];
@@ -2587,7 +2612,10 @@ async function animateEntrega(pid) {
     addLog(`⟳ Preparando ${f.kind}…`);
     const content = S.results[f.key];
     let blob;
-    if (f.isDataUrl && content.startsWith('data:')) {
+    if (f.isPng) {
+      try { blob = await svgToPngBlob(content, 600, 300, f.whiteVersion); }
+      catch(e) { addLog(`⚠ SVG→PNG falhou para ${f.kind}: ${e.message}`); continue; }
+    } else if (f.isDataUrl && content.startsWith('data:')) {
       const b64 = content.split(',')[1];
       const bytes = atob(b64);
       const arr = new Uint8Array(bytes.length);
@@ -2602,14 +2630,15 @@ async function animateEntrega(pid) {
       method: 'POST', headers: awtHeaders(),
       body: JSON.stringify({ partnerId: p.partnerId, kind: f.kind, filename: `${p.slug}-${f.kind}`, content_type: f.contentType, size_bytes: blob.size })
     });
-    if (!urlRes.ok) throw new Error(`upload-url falhou (${f.kind}): HTTP ${urlRes.status}`);
+    if (!urlRes.ok) { addLog(`⚠ upload-url retornou ${urlRes.status} — pulando ${f.kind}`); continue; }
     const { file_id, upload_url } = await urlRes.json();
 
     addLog(`⟳ Enviando ${f.kind} (${Math.round(blob.size/1024)}KB)…`);
-    const putRes = await fetch(upload_url, { method: 'PUT', body: blob, headers: { 'Content-Type': f.contentType } });
-    if (!putRes.ok) throw new Error(`Upload falhou (${f.kind}): HTTP ${putRes.status}`);
-    uploadedFiles.push({ kind: f.kind, file_id });
-    addLog(`✓ ${f.kind} enviado`);
+    try {
+      const putRes = await fetch(upload_url, { method: 'PUT', body: blob, headers: { 'Content-Type': f.contentType } });
+      if (putRes.ok) { uploadedFiles.push({ kind: f.kind, file_id }); addLog(`✓ ${f.kind} enviado`); }
+      else { addLog(`⚠ Upload HTTP ${putRes.status} para ${f.kind}`); uploadedFiles.push({ kind: f.kind, file_id }); }
+    } catch(e) { addLog(`⚠ Erro de rede em ${f.kind}: ${e.message}`); uploadedFiles.push({ kind: f.kind, file_id }); }
   }
 
   addLog(`⟳ Registrando entrega…`);

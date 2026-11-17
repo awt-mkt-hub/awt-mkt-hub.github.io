@@ -2633,7 +2633,10 @@ async function animateEntrega(pid) {
     addLog(`⟳ Preparando ${f.kind}…`);
     const content = S.results[f.key];
     let blob;
-    if (f.isPng) {
+    if (f.isPdf) {
+      try { blob = await htmlToPdfBlob(content); }
+      catch(e) { addLog(`⚠ HTML→PDF falhou para ${f.kind}: ${e.message}`); continue; }
+    } else if (f.isPng) {
       try { blob = await svgToPngBlob(content, 600, 300, f.whiteVersion); }
       catch(e) { addLog(`⚠ SVG→PNG falhou para ${f.kind}: ${e.message}`); continue; }
     } else if (f.isDataUrl && content.startsWith('data:')) {

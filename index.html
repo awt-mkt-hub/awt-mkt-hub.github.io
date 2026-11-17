@@ -2595,8 +2595,10 @@ async function htmlToPdfBlob(htmlStr) {
   div.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;';
   document.body.appendChild(div);
   try {
-    const blob = await html2pdf().set({ margin: 0, filename: 'doc.pdf', html2canvas: { scale: 2 }, jsPDF: { format: 'a4' } }).from(div).outputPdf('blob');
-    return blob;
+    const opt = { margin: 0, filename: 'doc.pdf', html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+    const pdf = await html2pdf().set(opt).from(div).toPdf().get('pdf');
+    const ab = pdf.output('arraybuffer');
+    return new Blob([ab], { type: 'application/pdf' });
   } finally { document.body.removeChild(div); }
 }
 async function animateEntrega(pid) {

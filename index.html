@@ -2053,25 +2053,39 @@ async function animateFotoCorp(pid, sid) {
     return;
   }
   try {
-    // Converte dataUrl → Blob
-    const res = await fetch(fotoData.dataUrl);
-    const blob = await res.blob();
-    const file = new File([blob], 'foto.png', { type: fotoData.mime || 'image/png' });
-    const form = new FormData();
-    form.append('model', 'gpt-image-1');
-    form.append('image', file);
-    form.append('prompt', FOTO_CORP_PROMPT);
-    form.append('n', '1');
-    form.append('size', '1024x1024');
+    let b64 = null;
 
-    const apiRes = await fetch('https://api.openai.com/v1/images/edits', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${S.openaiKey}` },
-      body: form
-    });
-    const data = await apiRes.json();
-    if (!apiRes.ok) throw new Error(data.error?.message || JSON.stringify(data));
-    const b64 = data.data[0].b64_json;
+    // Tenta gpt-image-1 (edits) — requer tier especial na OpenAI
+    try {
+      const res = await fetch(fotoData.dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'foto.png', { type: fotoData.mime || 'image/png' });
+      const form = new FormData();
+      form.append('model', 'gpt-image-1');
+      form.append('image', file);
+      form.append('prompt', FOTO_CORP_PROMPT);
+      form.append('n', '1');
+      form.append('size', '1024x1024');
+      const apiRes = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${S.openaiKey}` },
+        body: form
+      });
+      const data = await apiRes.json();
+      if (!apiRes.ok) throw new Error(data.error?.message || '');
+      b64 = data.data[0].b64_json;
+    } catch(e1) {
+      // Fallback: dall-e-3 generations (sem edição, mas funciona sem tier especial)
+      const genRes = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${S.openaiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'dall-e-3', prompt: FOTO_CORP_PROMPT, n: 1, size: '1024x1024', response_format: 'b64_json' })
+      });
+      const genData = await genRes.json();
+      if (!genRes.ok) throw new Error(genData.error?.message || JSON.stringify(genData));
+      b64 = genData.data[0].b64_json;
+    }
+
     S.results[rKey] = `data:image/png;base64,${b64}`;
     lsSet('awt_results', S.results);
     delete S.results[rKey + '_error'];

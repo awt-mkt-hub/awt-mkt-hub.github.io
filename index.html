@@ -2053,7 +2053,7 @@ async function animateFotoCorp(pid, sid) {
     const blob = await res.blob();
     const file = new File([blob], 'foto.png', { type: fotoData.mime || 'image/png' });
     const form = new FormData();
-    form.append('model', 'dall-e-2');
+    form.append('model', 'gpt-image-1');
     form.append('image', file);
     form.append('prompt', FOTO_CORP_PROMPT);
     form.append('n', '1');

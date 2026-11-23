@@ -320,7 +320,7 @@ const S = {
   awtIntUrl:   (()=>{ try { return localStorage.getItem('awt_inturl') || 'https://awt-onboarding-services-365707580016.us-central1.run.app'; } catch(e){ return 'https://awt-onboarding-services-365707580016.us-central1.run.app'; } })(),
   awtIntKey:   (()=>{ try { return localStorage.getItem('awt_intkey') || 'b9871a1a22a0d9cc74fadb6026c534848e8099953056253388170a2a249e1d8b'; } catch(e){ return 'b9871a1a22a0d9cc74fadb6026c534848e8099953056253388170a2a249e1d8b'; } })(),
   operEmail:   (()=>{ try { return localStorage.getItem('awt_operemail') || 'franca.lauria@awtgroup.com.br'; } catch(e){ return 'franca.lauria@awtgroup.com.br'; } })(),
-  results:     lsGet('awt_results', {}),
+  results:     (()=>{ const r = lsGet('awt_results', {}); try { Object.keys(localStorage).forEach(k => { if (k.startsWith('awt_site_')) { const rk = k.slice('awt_site_'.length); if (!r[rk]) r[rk] = localStorage.getItem(k) || ''; } }); } catch(e){} return r; })(),
   apiConfigOpen: false,
   githubCfgOpen: false,
   vercelCfgOpen: false,
@@ -340,7 +340,12 @@ function saveState() {
     const slim = {};
     Object.keys(S.results).forEach(k => {
       const v = S.results[k];
-      if (typeof v === 'string' && v.length < 300000) slim[k] = v; // ignora se muito grande
+      if (typeof v !== 'string') return;
+      if (k.endsWith('_site')) {
+        try { localStorage.setItem('awt_site_' + k, v); } catch(e) {}
+      } else if (v.length < 300000) {
+        slim[k] = v;
+      }
     });
     lsSet('awt_results', slim);
   } catch(e) {}

@@ -200,6 +200,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </head>
 <body>
 <div id="app"></div>
+<script src="js/awt-brand.js"></script>
+<script src="js/awt-brand-browser.js"></script>
+<script src="js/awt-publish.js"></script>
 <script>
 
 // ═══════════════════════════════════════════════
@@ -294,8 +297,7 @@ const ALL_STEPS = [
   { id: 'site',          label: 'Site',            desc: 'Site institucional',     icon: '🌐' },
   { id: 'fotoCorp',      label: 'Foto Corp.',      desc: 'Foto corporativa',       icon: '📸' },
   { id: 'revisao',       label: 'Revisão',         desc: 'Check-up final',         icon: '👁️' },
-  { id: 'publicar',      label: 'Publicar',        desc: 'GitHub + Vercel',        icon: '🚀' },
-  { id: 'entregar',      label: 'Entregar',        desc: 'Enviar ao Onboarding',   icon: '📤' },
+  { id: 'publicar',      label: 'Publicar',        desc: 'GitHub + Vercel + Onboarding', icon: '🚀' },
 ];
 
 // ═══════════════════════════════════════════════
@@ -309,7 +311,8 @@ const S = {
   pid: null,
   si: 0,
   status:      lsGet('awt_status', {}),
-  pubSt: null,
+  redo: {}, // session-only: { `${pid}_${etapa}`: true } — refazer mesmo o que o parceiro pediu para manter
+  pub: {}, // session-only: { pid: { state: 'running'|'done'|'error', row, error, result } } — uma publicação por parceira
   ajustesNote: lsGet('awt_ajustes', {}),
   ajustesImg:  {},
   iter:        lsGet('awt_iter', {}),
@@ -317,7 +320,7 @@ const S = {
   githubToken: (()=>{ try { return localStorage.getItem('awt_githubtoken') || ''; } catch(e){ return ''; } })(),
   vercelToken: (()=>{ try { return localStorage.getItem('awt_verceltoken') || ''; } catch(e){ return ''; } })(),
   openaiKey:   (()=>{ try { return localStorage.getItem('awt_openaikey') || ''; } catch(e){ return ''; } })(),
-  awtIntUrl:   (()=>{ try { return localStorage.getItem('awt_inturl') || 'https://awt-onboarding-services-365707580016.us-central1.run.app'; } catch(e){ return 'https://awt-onboarding-services-365707580016.us-central1.run.app'; } })(),
+  awtIntUrl:   (()=>{ try { return localStorage.getItem('awt_inturl') || AwtBrand.API_BASE_URL; } catch(e){ return AwtBrand.API_BASE_URL; } })(),
   awtIntKey:   (()=>{ try { return localStorage.getItem('awt_intkey') || 'b9871a1a22a0d9cc74fadb6026c534848e8099953056253388170a2a249e1d8b'; } catch(e){ return 'b9871a1a22a0d9cc74fadb6026c534848e8099953056253388170a2a249e1d8b'; } })(),
   operEmail:   (()=>{ try { return localStorage.getItem('awt_operemail') || 'franca.lauria@awtgroup.com.br'; } catch(e){ return 'franca.lauria@awtgroup.com.br'; } })(),
   results:     (()=>{ const r = lsGet('awt_results', {}); try { Object.keys(localStorage).forEach(k => { if (k.startsWith('awt_site_')) { const rk = k.slice('awt_site_'.length); if (!r[rk]) r[rk] = localStorage.getItem(k) || ''; } }); } catch(e){} return r; })(),
@@ -327,8 +330,6 @@ const S = {
   openaiCfgOpen: false,
   awtIntCfgOpen: false,
   fotoCorpInput: {}, // session-only: { pid: dataUrl }
-  entregandoPid: null, // pid currently being delivered (blocks double-click)
-  deliveryVersion: lsGet('awt_delivery_version', {}), // { pid: versionNumber }
 };
 
 function saveState() {
@@ -360,6 +361,7 @@ function resetPartner(pid) {
   ['status','ajustesNote','iter','results'].forEach(key => {
     Object.keys(S[key]).forEach(k => { if (k.startsWith(prefix)) delete S[key][k]; });
   });
+  delete S.pub[pid];
   saveState();
   render();
 }
@@ -628,9 +630,9 @@ function rApiCfg() {
     </div>` : ''}
     <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">
       <div class="api-cfg-row" data-a="toggle-awtintcfg">
-        <span class="api-dot ${(S.awtIntUrl && S.awtIntKey) ? 'ok' : 'off'}"></span>
-        <span class="api-cfg-lbl">${(S.awtIntUrl && S.awtIntKey) ? 'Integração AWT ativa' : 'Integração AWT não configurada'}</span>
-        <button class="api-cfg-btn" data-a="toggle-awtintcfg">${(S.awtIntUrl && S.awtIntKey) ? '✎' : '+ Config'}</button>
+        <span class="api-dot ${integrationReady() ? 'ok' : 'off'}"></span>
+        <span class="api-cfg-lbl">${integrationReady() ? 'Integração AWT ativa' : 'Integração AWT não configurada'}</span>
+        <button class="api-cfg-btn" data-a="toggle-awtintcfg">${integrationReady() ? '✎' : '+ Config'}</button>
       </div>
       ${S.awtIntCfgOpen ? `<div class="api-input-wrap">
         <input class="api-input" id="awt-inturl-input" type="text"
@@ -780,7 +782,7 @@ function rQueue() {
           <h1>${tab === 'ativos' ? 'Em andamento' : 'Concluídos'}</h1>
           <p>${tab === 'ativos' ? `${ativos.length} parceiros · ${pendCount} aguardando` : `${concluidos.length} parceiros entregues`}</p>
         </div>
-        ${S.awtIntUrl && S.awtIntKey ? `<button class="btn btn-s" data-a="load-queue" style="font-size:12px;padding:7px 14px">🔄 Atualizar fila</button>` : ''}
+        ${integrationReady() ? `<button class="btn btn-s" data-a="load-queue" style="font-size:12px;padding:7px 14px">🔄 Atualizar fila</button>` : ''}
       </div>
       ${successBanner}
       <div class="q-list">${tab === 'ativos' ? listaAtivos : listaConcluidos}</div>
@@ -846,10 +848,63 @@ function rStep(p, step, si, steps) {
   if (id === 'fotoCorp')  return rGen(p, step, si, 'fotoCorp');
   if (id === 'revisao')   return rRevisao(p, step, si, steps);
   if (id === 'publicar')  return rPublicar(p, step, si, steps);
-  if (id === 'entregar')  return rEntregar(p, step, si, steps);
 }
 
 // ── BRIEFING ──
+// ── O QUE O PARCEIRO JÁ TEM ──
+// O parceiro declara no formulário o que já tem (logo, site, cartão, papel timbrado). `acao`: manter = não refazer; ajustar = partir do
+// que ele enviou e seguir o pedido; criar = o time cria. O que o painel PRECISA entregar vem do servidor (arquivosObrigatorios).
+const STEP_OF_MATERIAL = { logo: 'logo', site: 'site', cartao: 'cartao', timbrado: 'papelTimbrado' };
+const MATERIAL_OF_STEP = Object.fromEntries(Object.entries(STEP_OF_MATERIAL).map(([material, step]) => [step, material]));
+const MATERIAL_LABEL = { logo: 'Logo', site: 'Site', cartao: 'Cartão de visita', timbrado: 'Papel timbrado' };
+const MATERIAL_KINDS = { logo: ['logo_svg', 'logo_png', 'logo_branco_png'], site: ['site_html'], cartao: ['cartao_pdf'], timbrado: ['timbrado_pdf'] };
+const MATERIAL_ACTION = {
+  manter:  { icon: '✅', text: 'O parceiro já tem e quer manter como está. Não refazer.',     bg: '#D1FAE5', fg: '#065F46' },
+  ajustar: { icon: '✏️', text: 'O parceiro já tem e pediu ajustes. Parta do que ele enviou.', bg: '#FEF3C7', fg: '#92400E' },
+  criar:   { icon: '🎨', text: 'O parceiro não tem: o time cria.',                             bg: '#F4F0F8', fg: '#4B3B6B' },
+};
+
+const partnerMaterial = (p, material) => (p.materiais && p.materiais[material]) || null;
+/** Mantido pelo parceiro e ninguém decidiu refazer: o painel não gera nem entrega esse material (o servidor usa o arquivo dele). */
+const materialKept = (p, material) => !!(partnerMaterial(p, material)?.acao === 'manter' && !S.redo[`${p.id}_${STEP_OF_MATERIAL[material]}`]);
+const materialOfKind = kind => Object.keys(MATERIAL_KINDS).find(material => MATERIAL_KINDS[material].includes(kind));
+const kindKept = (p, kind) => { const material = materialOfKind(kind); return !!material && materialKept(p, material); };
+
+const materialLink = m => (m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener" style="color:inherit;font-weight:600">${esc(m.arquivo || m.url)} ↗</a>` : '');
+
+function materialLine(material, m) {
+  const view = MATERIAL_ACTION[m.acao] || MATERIAL_ACTION.criar;
+  return `<div style="background:${view.bg};color:${view.fg};border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.6;margin-bottom:8px">
+    ${view.icon} <strong>${MATERIAL_LABEL[material]}</strong> — ${view.text} ${materialLink(m)}
+    ${m.obs ? `<div style="margin-top:4px"><strong>Pedido do parceiro:</strong> ${esc(m.obs)}</div>` : ''}
+  </div>`;
+}
+
+/** Aviso no topo da etapa: só quando o parceiro já tem o material (manter ou ajustar). */
+const materialBanner = (p, material) => { const m = partnerMaterial(p, material); return m && m.acao !== 'criar' ? materialLine(material, m) : ''; };
+
+function materiaisCard(p) {
+  if (!p.materiais) return '';
+  return `<div class="card">
+    <div class="card-title">O que o parceiro já tem</div>
+    ${Object.keys(MATERIAL_LABEL).map(material => (p.materiais[material] ? materialLine(material, p.materiais[material]) : '')).join('')}
+  </div>`;
+}
+
+/** Etapa de um material que o parceiro quer manter: segue sem gerar nada. */
+function rMantido(p, step, material) {
+  return `<div class="sc">
+    <div class="sc-head"><h2>${step.icon} ${MATERIAL_LABEL[material]}</h2><p>O parceiro pediu para manter o que já tem.</p></div>
+    <div class="card">
+      ${materialBanner(p, material)}
+      <div class="btn-row">
+        <button class="btn btn-g btn-lg" data-a="done" data-pid="${p.id}" data-sid="${step.id}">Manter como está e continuar →</button>
+        <button class="btn btn-s" data-a="redo-material" data-pid="${p.id}" data-sid="${step.id}">Refazer mesmo assim</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function rBriefing(p, step, si, steps) {
   const specs = p.especialidades.map(e => `<span class="chip chip-ativo">${e}</span>`).join(' ');
   const na = `<em style="color:#ccc;font-style:normal">—</em>`;
@@ -876,6 +931,7 @@ function rBriefing(p, step, si, steps) {
         <div style="grid-column:span 2"><div class="di-lbl">Diferenciais</div><div class="di-val">${p.diferenciais || na}</div></div>
       </div>
     </div>
+    ${materiaisCard(p)}
     <div class="card">
       <div class="card-title">Contato & Ativos Solicitados</div>
       <div class="dg">
@@ -893,6 +949,8 @@ function rBriefing(p, step, si, steps) {
 
 // ── GEN STEP ──
 function rGen(p, step, si, type) {
+  const material = MATERIAL_OF_STEP[type];
+  if (material && materialKept(p, material)) return rMantido(p, step, material); // o parceiro pediu para manter: não se refaz
   const st = gst(p.id, step.id);
   const labels = { logo: '🎨 Logo', cartao: '🪪 Cartão', papelTimbrado: '📄 Papel Timbrado', site: '🌐 Site', fotoCorp: '📸 Foto Corporativa' };
   const descs = {
@@ -1169,7 +1227,7 @@ function rGen(p, step, si, type) {
 
   return `<div class="sc">
     <div class="sc-head"><h2>${labels[type]}</h2><p>${descs[type]}</p></div>
-    <div class="card">${body}</div>
+    <div class="card">${material ? materialBanner(p, material) : ''}${body}</div>
   </div>`;
 }
 
@@ -1199,164 +1257,126 @@ function rRevisao(p, step, si, steps) {
 }
 
 // ── PUBLICAR ──
+// Um clique publica tudo: pasta do escritório no GitHub, site no Vercel e entrega ao onboarding (js/awt-publish.js).
 const PUB_STEPS = [
-  { icon: '🐙', label: 'Push no GitHub',       getDetail: s => `awt-mkt-hub/awt-mkt-hub.github.io / ${s}/index.html` },
-  { icon: '📦', label: 'Arquivos commitados',  getDetail: s => `${s}/index.html + ${s}/logo.svg` },
-  { icon: '▲',  label: 'Deploy no Vercel',     getDetail: s => `${s}.vercel.app` },
-  { icon: '🌐', label: 'Site publicado',        getDetail: s => `https://${s}.vercel.app` },
+  { icon: '🧩', label: 'Preparar arquivos',     detail: () => 'Confere logo, cartão, papel timbrado, site e foto antes de publicar' },
+  { icon: '🐙', label: 'Pasta no GitHub',       detail: p => (publishFiles(p).length ? `${AwtPublish.GITHUB.owner}/${AwtPublish.GITHUB.repo} / ${AwtPublish.folderName(p.nomeMarca, p.slug)}/` : 'Nada a publicar: o parceiro manteve os materiais') },
+  { icon: '▲',  label: 'Deploy no Vercel',      detail: p => (publishPartner(p).keptSiteUrl ? `Não há deploy: o site é o do parceiro (${publishPartner(p).keptSiteUrl})` : `${p.slug}.vercel.app`) },
+  { icon: '📤', label: 'Entrega ao onboarding', detail: p => (!p.partnerId ? 'Parceira sem vínculo com o onboarding: não é entregue' : publishFiles(p).length ? 'Envia os mesmos arquivos e registra a versão' : 'Confirma que o parceiro manteve os materiais (nada a enviar)') },
 ];
+const PUB_STAGE_ROW = { prepare: 0, github: 1, vercel: 2, onboarding: 3 };
+const PUB_ROW_VIEW = {
+  ok:   { bg: '#D1FAE5', html: '<span class="pub-st st-ok">✓ Concluído</span>' },
+  run:  { bg: '#EDE9F5', html: '<span class="pub-st st-run">Em andamento…</span>' },
+  err:  { bg: '#FEE2E2', html: '<span class="pub-st" style="color:#B91C1C;font-weight:600">✗ Falhou</span>' },
+  pend: { bg: '#F4F0F8', html: '<span class="pub-st st-pend">Aguardando</span>' },
+  skip: { bg: '#F4F0F8', html: '<span class="pub-st st-pend">Não se aplica</span>' },
+};
+
+/** Etapa que não se aplica a esta parceira: nada a subir no GitHub, site do parceiro mantido (sem Vercel) ou sem vínculo com o onboarding. */
+function pubRowSkipped(p, i) {
+  return (i === PUB_STAGE_ROW.github && !publishFiles(p).length)
+    || (i === PUB_STAGE_ROW.vercel && !!publishPartner(p).keptSiteUrl)
+    || (i === PUB_STAGE_ROW.onboarding && !p.partnerId);
+}
+
+function pubRowView(p, pub, i) {
+  if (pubRowSkipped(p, i)) return PUB_ROW_VIEW.skip;
+  if (pub.state === 'done') return PUB_ROW_VIEW.ok;
+  if (pub.state === 'idle' || i > pub.row) return PUB_ROW_VIEW.pend;
+  if (i < pub.row) return PUB_ROW_VIEW.ok;
+  return PUB_ROW_VIEW[pub.state === 'error' ? 'err' : 'run'];
+}
+
+/** O que impede de publicar agora, em frases que o operador consegue agir. Vazio = pode publicar. */
+function publishBlockers(p) {
+  const blockers = [];
+  const files = publishFiles(p), partner = publishPartner(p);
+  const missing = AwtBrand.missingKinds(partner, files.map(f => f.kind));
+  if (missing.length) blockers.push(`gere antes: ${missing.map(kind => AwtBrand.KINDS[kind].label).join(', ')}`);
+  if (files.length && !S.githubToken) blockers.push('configure o token do GitHub na barra lateral');
+  if (!partner.keptSiteUrl && !S.vercelToken) blockers.push('configure o token do Vercel na barra lateral');
+  if (p.partnerId && !integrationReady()) blockers.push('configure a Integração AWT na barra lateral');
+  return blockers;
+}
 
 function rPublicar(p, step, si, steps) {
-  const pubSt = S.pubSt; // null | 0..3 | 'done'
-
+  const pub = S.pub[p.id] || { state: 'idle', row: 0 };
   const rows = PUB_STEPS.map((ps, i) => {
-    let iconBg = '#F4F0F8', stHtml = `<span class="pub-st st-pend">Aguardando</span>`;
-    if (pubSt === 'done') {
-      iconBg = '#D1FAE5'; stHtml = `<span class="pub-st st-ok">✓ Concluído</span>`;
-    } else if (pubSt !== null) {
-      if (i < pubSt) { iconBg = '#D1FAE5'; stHtml = `<span class="pub-st st-ok">✓ Concluído</span>`; }
-      else if (i === pubSt) { iconBg = '#EDE9F5'; stHtml = `<span class="pub-st st-run">Em andamento…</span>`; }
-    }
+    const view = pubRowView(p, pub, i);
     return `<div class="pub-step">
-      <div class="pub-icon" style="background:${iconBg}">${ps.icon}</div>
-      <div><div class="pub-lbl">${ps.label}</div><div class="pub-det">${ps.getDetail(p.slug)}</div></div>
-      ${stHtml}
+      <div class="pub-icon" style="background:${view.bg}">${ps.icon}</div>
+      <div><div class="pub-lbl">${ps.label}</div><div class="pub-det">${esc(ps.detail(p))}</div></div>
+      ${view.html}
     </div>`;
   }).join('');
 
-  if (pubSt === 'error') {
+  if (pub.state === 'error') {
     return `<div class="sc">
       <div class="sc-head"><h2>⚠️ Erro ao publicar</h2></div>
-      <div class="card" style="color:#B91C1C;font-size:13px;padding:16px">${S.pubError || 'Erro desconhecido.'}</div>
-      <div class="btn-row">
-        <button class="btn btn-s" data-a="publish" data-pid="${p.id}">↺ Tentar novamente</button>
-      </div>
+      <div class="card" style="color:#B91C1C;font-size:13px;padding:16px">${esc(pub.error || 'Erro desconhecido.')}</div>
+      <div class="card">${rows}</div>
+      <div class="btn-row"><button class="btn btn-s" data-a="publish" data-pid="${p.id}">↺ Tentar novamente</button></div>
     </div>`;
   }
-  if (pubSt === 'done') {
-    const url = S.pubUrl || `https://${p.slug}.vercel.app`;
+
+  if (pub.state === 'done') {
+    const { folder, git, site, delivered } = pub.result;
     return `<div class="sc">
-      <div class="sc-head"><h2>🚀 Publicado!</h2><p>Site no ar.</p></div>
+      <div class="sc-head"><h2>🚀 Publicado!</h2><p>${delivered ? 'Materiais entregues ao onboarding.' : 'Publicação concluída.'}</p></div>
       <div class="card">${rows}</div>
       <div class="box-ok">
         <span style="font-size:22px">🌐</span>
-        <div>
-          <div style="font-weight:700;color:#065F46">Site publicado com sucesso!</div>
-          <div style="font-size:12px;color:#065F46;margin-top:2px">${url}</div>
-        </div>
-        <a href="${url}" target="_blank" class="btn btn-s" style="margin-left:auto">Abrir ↗</a>
+        <div><div style="font-weight:700;color:#065F46">${site.deploymentId ? 'Site publicado' : 'Site do parceiro (mantido)'}</div><div style="font-size:12px;color:#065F46;margin-top:2px">${esc(site.url)}</div></div>
+        <a href="${esc(site.url)}" target="_blank" rel="noopener" class="btn btn-s" style="margin-left:auto">Abrir ↗</a>
       </div>
+      ${git ? `<div class="box-ok" style="margin-top:10px">
+        <span style="font-size:22px">🐙</span>
+        <div><div style="font-weight:700;color:#065F46">Pasta “${esc(folder)}” no GitHub</div><div style="font-size:12px;color:#065F46;margin-top:2px">${git.changed ? 'Arquivos gravados em um commit.' : 'Nada mudou desde a última publicação.'}</div></div>
+        <a href="${esc(git.folderUrl)}" target="_blank" rel="noopener" class="btn btn-s" style="margin-left:auto">Abrir ↗</a>
+      </div>` : ''}
+      ${delivered ? `<div class="box-ok" style="margin-top:10px">
+        <span style="font-size:22px">📤</span>
+        <div><div style="font-weight:700;color:#065F46">Entregue ao onboarding</div><div style="font-size:12px;color:#065F46;margin-top:2px">Versão ${delivered.version} · ${delivered.files.length} arquivos · a Fran receberá para aprovação</div></div>
+      </div>` : ''}
       <div class="btn-row" style="margin-top:20px">
-        <button class="btn btn-p btn-lg" data-a="done" data-pid="${p.id}" data-sid="publicar">Continuar →</button>
+        <button class="btn btn-p btn-lg" data-a="done" data-pid="${p.id}" data-sid="publicar">Concluir ✓</button>
+        <button class="btn btn-s" data-a="publish" data-pid="${p.id}" style="font-size:12px">↺ Publicar de novo</button>
       </div>
     </div>`;
   }
 
-  return `<div class="sc">
-    <div class="sc-head"><h2>🚀 Publicar</h2><p>Faz o push no GitHub e ativa o GitHub Pages para publicar o site.</p></div>
-    <div class="card">${rows}</div>
-    ${pubSt !== null ? '' : `<div class="btn-row"><button class="btn btn-p btn-lg" data-a="publish" data-pid="${p.id}">🚀 Publicar agora</button></div>`}
-  </div>`;
-}
-
-// ── ENTREGAR ──
-function rEntregar(p, step, si, steps) {
-  const firstName = p.primeiroNome || p.nomeBanker.split(' ')[0];
-  const hasPhoto = (p.ativos || []).includes('fotos-ai');
-  const hasPap = (p.ativos || []).includes('papelaria');
-  const hasIntegration = !!(S.awtIntUrl && S.awtIntKey);
-  const isEntregando = S.entregandoPid === p.id;
-  const pubUrl = S.pubUrl || `https://${p.slug}.vercel.app`;
-  const ghUrl = `https://github.com/awt-mkt-hub/AWT-Onboarding/tree/main/${p.slug}`;
-
-  // Build files list
-  const files = [];
-  if (S.results[p.id + '_logo']) files.push({ kind: 'logo_svg', label: 'Logo SVG', icon: '🎨', key: p.id + '_logo' });
-  if (S.results[p.id + '_cartao']) files.push({ kind: 'cartao_pdf', label: 'Cartão de Visitas (HTML)', icon: '🪪', key: p.id + '_cartao' });
-  if (S.results[p.id + '_papelTimbrado']) files.push({ kind: 'timbrado_pdf', label: 'Papel Timbrado (HTML)', icon: '📄', key: p.id + '_papelTimbrado' });
-  if (S.results[p.id + '_site']) files.push({ kind: 'site_html', label: 'Site HTML', icon: '🌐', key: p.id + '_site' });
-  if (S.results[p.id + '_fotoCorp']) files.push({ kind: 'foto_png', label: 'Foto Corporativa', icon: '📸', key: p.id + '_fotoCorp' });
-
-  const fileList = files.map(f => `<div class="ent-file"><span>${f.icon}</span>${f.label}</div>`).join('');
-
-  if (!hasIntegration) {
-    // Fallback: sem integração configurada, mostra aviso e botão manual
-    const subject = encodeURIComponent(`Seus materiais de marca estão prontos — ${p.nomeMarca}`);
-    const bodyTxt = encodeURIComponent(`Olá, ${firstName}!\n\nSeus materiais de marca estão prontos.\n\n• Site: ${pubUrl}\n• Logo, cartão e timbrado em anexo\n\nAtt,\nEquipe AWT Group`);
-    return `<div class="sc">
-      <div class="sc-head"><h2>📤 Entregar ao Parceiro</h2><p>Configure a Integração AWT para enviar ao onboarding automaticamente.</p></div>
-      <div class="card">
-        <div class="card-title">Integração AWT <span class="badge badge-pend">não configurada</span></div>
-        <div class="box-warn" style="margin-bottom:12px">⚠️ Configure a URL base e chave de integração na barra lateral para habilitar a entrega ao onboarding.</div>
-        <div class="entrega-block"><h4>Materiais prontos para entrega</h4>${fileList || '<div style="color:#999;font-size:12px">Nenhum arquivo gerado ainda.</div>'}</div>
-      </div>
-      <div class="btn-row">
-        <a href="mailto:${p.email}?subject=${subject}&body=${bodyTxt}" class="btn btn-g">✉️ Enviar e-mail manualmente para ${firstName}</a>
-        <button class="btn btn-p" data-a="done" data-pid="${p.id}" data-sid="entregar">Marcar como concluído ✓</button>
-      </div>
-    </div>`;
+  if (pub.state === 'running') {
+    return `<div class="sc"><div class="sc-head"><h2>🚀 Publicando…</h2><p>Não feche esta página até terminar.</p></div><div class="card">${rows}</div></div>`;
   }
 
-  // Com integração configurada
-  const version = (S.deliveryVersion[p.id] || 0) + 1;
+  const files = publishFiles(p);
+  const blockers = publishBlockers(p);
   const isAjuste = p.status === 'ajuste_pedido';
-
-  const entregaSt = S.results[p.id + '_entrega_sent'];
-
-  if (entregaSt) {
-    const sentAt = S.results[p.id + '_entrega_sent_at'] || '';
-    return `<div class="sc">
-      <div class="sc-head"><h2>📤 Entregue!</h2><p>Materiais enviados ao onboarding AWT.</p></div>
-      <div class="card">
-        <div class="box-ok">
-          <span style="font-size:22px">✅</span>
-          <div>
-            <div style="font-weight:700;color:#065F46">Enviado ao onboarding em ${sentAt}</div>
-            <div style="font-size:12px;color:#065F46;margin-top:2px">Versão ${version - 1} · ${files.length} arquivos · a Fran receberá para aprovação</div>
-          </div>
-        </div>
-        ${isAjuste ? `<div class="box-warn" style="margin-top:12px">🔄 Esta foi uma <strong>reentrega (v${version - 1})</strong> após ajuste pedido.</div>` : ''}
-      </div>
-      <div class="btn-row">
-        <button class="btn btn-p btn-lg" data-a="done" data-pid="${p.id}" data-sid="entregar">Concluir ✓</button>
-        <button class="btn btn-s" data-a="re-entregar" data-pid="${p.id}" style="font-size:12px">↺ Reenviar</button>
-      </div>
-    </div>`;
-  }
-
+  const version = AwtBrand.nextVersion(p);
+  const fileList = files.map(f => `<div class="ent-file"><span>${f.icon}</span>${AwtBrand.KINDS[f.kind].label}</div>`).join('');
   return `<div class="sc">
     <div class="sc-head">
-      <h2>📤 Enviar ao Onboarding AWT</h2>
-      <p>${isAjuste ? `🔄 Reentrega — ${p.ajusteComentario || 'ajuste solicitado'}` : `Carrega os arquivos e notifica o sistema — a Fran aprova antes de o e-mail sair.`}</p>
+      <h2>🚀 Publicar</h2>
+      <p>${isAjuste ? `🔄 Reentrega — ${esc(p.ajusteComentario || 'ajuste solicitado')}` : 'Um clique: pasta no GitHub, site no Vercel e entrega ao onboarding — a Fran aprova antes de o e-mail sair.'}</p>
     </div>
     <div class="card">
-      <div class="card-title">Arquivos a enviar${files.length ? '' : ' <span style="color:#EF4444;font-size:10px">nenhum arquivo gerado</span>'}</div>
-      ${fileList || '<div style="color:#999;font-size:12px">Gere os assets nas etapas anteriores antes de entregar.</div>'}
-    </div>
-    <div class="card">
-      <div class="card-title">Site publicado</div>
-      <div class="ent-link">🔗 ${pubUrl}</div>
+      <div class="card-title">Arquivos${files.length ? '' : ' <span style="color:#EF4444;font-size:10px">nenhum arquivo gerado</span>'}</div>
+      ${fileList || '<div style="color:#999;font-size:12px">Gere os assets nas etapas anteriores antes de publicar.</div>'}
     </div>
     <div class="card">
       <div class="card-title">Checklist de entrega</div>
       <div class="chk-item"><input type="checkbox" id="ec1"><label for="ec1">Nome da marca correto em todos os materiais</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec2"><label for="ec2">Cor primária correta — #${p.corHex}</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec3"><label for="ec3">Botão WhatsApp com número correto — ${p.celular}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec2"><label for="ec2">Cor primária correta — #${esc(p.corHex)}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec3"><label for="ec3">Botão WhatsApp com número correto — ${esc(p.celular)}</label></div>
       <div class="chk-item"><input type="checkbox" id="ec4"><label for="ec4">Disclaimer AWT presente no site</label></div>
       <div class="chk-item"><input type="checkbox" id="ec5"><label for="ec5">Sem palavras proibidas</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec6"><label for="ec6">Especialidades conferidas: ${(p.especialidades || []).join(', ')}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec6"><label for="ec6">Especialidades conferidas: ${esc((p.especialidades || []).join(', '))}</label></div>
     </div>
-    <div id="entrega-progress" style="display:none">
-      <div style="background:#F4F0F8;border-radius:8px;padding:14px;margin-bottom:14px">
-        <div style="font-size:13px;font-weight:600;color:var(--roxo);margin-bottom:8px">⟳ Enviando ao onboarding…</div>
-        <div id="entrega-log" style="font-size:12px;color:var(--suave);line-height:1.8"></div>
-      </div>
-    </div>
-    <div id="entrega-error" style="display:none;background:#FEE2E2;border-radius:8px;padding:12px 16px;font-size:12px;color:#991B1B;margin-bottom:14px"></div>
+    <div class="card">${rows}</div>
+    ${blockers.length ? `<div class="box-warn" style="margin-bottom:14px">⚠️ Para publicar: ${esc(blockers.join('; '))}.</div>` : ''}
     <div class="btn-row">
-      <button class="btn btn-g btn-lg" data-a="entregar-onboarding" data-pid="${p.id}" ${isEntregando || files.length === 0 ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}>
-        ${isEntregando ? '⟳ Enviando…' : '🚀 Enviar para o onboarding'}
-      </button>
+      <button class="btn btn-p btn-lg" data-a="publish" data-pid="${p.id}" ${blockers.length ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}>🚀 Publicar agora</button>
     </div>
     ${version > 1 ? `<div style="font-size:11px;color:#999;margin-top:8px">Esta será a <strong>versão ${version}</strong> (reentrega após ajuste).</div>` : ''}
   </div>`;
@@ -1382,7 +1402,7 @@ document.addEventListener('click', function(e) {
     return;
   }
   if (a === 'sel') {
-    S.view = 'workflow'; S.pid = parseInt(el.dataset.id); S.si = 0; S.pubSt = null;
+    S.view = 'workflow'; S.pid = parseInt(el.dataset.id); S.si = 0;
     sst(S.pid, 'briefing', 'done');
     S.si = 0;
     render(); scrollTop();
@@ -1406,9 +1426,7 @@ document.addEventListener('click', function(e) {
     // Ao confirmar o briefing, dispara brand.started (silenciosamente)
     if (sid === 'briefing') {
       const pp = gp(pid);
-      if (pp && pp.partnerId) {
-        postBrandEvent({ type: 'brand.started', partnerId: pp.partnerId }).catch(()=>{});
-      }
+      if (pp && pp.partnerId) notifyBrand(client => client.started(pp.partnerId));
     }
     sst(pid, sid, 'done');
     const steps = getSteps(gp(pid));
@@ -1456,9 +1474,15 @@ document.addEventListener('click', function(e) {
       animateGen(pid, sid, type);
     });
   }
+  if (a === 'redo-material') {
+    S.redo[`${el.dataset.pid}_${el.dataset.sid}`] = true; // o parceiro pediu para manter, mas a equipe decidiu refazer
+    render(); return;
+  }
   if (a === 'publish') {
-    S.pubSt = 0; S.pubError = null; S.pubUrl = null; render();
-    animatePublish(parseInt(el.dataset.pid));
+    const pid = parseInt(el.dataset.pid);
+    if (S.pub[pid] && S.pub[pid].state === 'running') return; // evita duplo clique
+    animatePublish(pid, publishChecklist()); // o checklist é lido antes de a tela ser redesenhada
+    return;
   }
   if (a === 'toggle-apicfg') {
     S.apiConfigOpen = !S.apiConfigOpen; render();
@@ -1519,19 +1543,6 @@ document.addEventListener('click', function(e) {
       S.githubCfgOpen = false;
       render();
     }
-  }
-  if (a === 'entregar-onboarding') {
-    const pid = parseInt(el.dataset.pid);
-    if (S.entregandoPid === pid) return; // block double-click
-    S.entregandoPid = pid; render();
-    animateEntrega(pid).then(() => { S.entregandoPid = null; render(); }).catch(() => { S.entregandoPid = null; render(); });
-    return;
-  }
-  if (a === 're-entregar') {
-    const pid = parseInt(el.dataset.pid);
-    delete S.results[pid + '_entrega_sent'];
-    delete S.results[pid + '_entrega_sent_at'];
-    render(); return;
   }
   if (a === 'toggle-awtintcfg') { S.awtIntCfgOpen = !S.awtIntCfgOpen; render(); if (S.awtIntCfgOpen) setTimeout(() => { const i = document.getElementById('awt-inturl-input'); if(i) i.focus(); }, 50); }
   if (a === 'close-awtintcfg') { S.awtIntCfgOpen = false; render(); }
@@ -2059,7 +2070,8 @@ async function animateFotoCorp(pid, sid) {
     try {
       const res = await fetch(fotoData.dataUrl);
       const blob = await res.blob();
-      const file = new File([blob], 'foto.png', { type: fotoData.mime || 'image/png' });
+      const mime = fotoData.mime || blob.type;
+      const file = new File([blob], `foto.${{ 'image/png': 'png', 'image/webp': 'webp' }[mime] || 'jpg'}`, { type: mime });
       const form = new FormData();
       form.append('model', 'gpt-image-1');
       form.append('image', file);
@@ -2247,121 +2259,6 @@ async function animateGen(pid, sid, type) {
   }
 }
 
-// ── ANIMATE PUBLISH (real GitHub + Vercel) ──
-async function animatePublish(pid) {
-  const p = PARTNERS.find(x => x.id === pid);
-  if (!p) return;
-
-  const ghToken  = S.githubToken;
-  const vcToken  = S.vercelToken;
-  const siteHtml = S.results[p.id + '_site'] || '';
-  const logoSvg  = S.results[p.id + '_logo']  || '';
-  const slug     = p.slug || p.nomeBanker.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
-  const ghOwner  = 'awt-mkt-hub';
-  const ghRepo   = 'AWT-Onboarding';
-  const vercelProject = `awt-${slug}`;
-
-  const setStep = s => { S.pubSt = s; render(); };
-  const fail = (msg, step = 'publicar') => {
-    S.pubSt = 'error'; S.pubError = msg; render();
-    if (p.partnerId) {
-      postBrandEvent({ type: 'brand.failed', partnerId: p.partnerId, step, error: msg }).catch(() => {});
-    }
-  };
-
-  // ── STEP 0: push index.html no GitHub ──
-  setStep(0);
-  if (!ghToken) { fail('Token do GitHub não configurado.'); return; }
-  if (!siteHtml) { fail('Site ainda não foi gerado. Volte à etapa Site e gere o site primeiro.'); return; }
-
-  try {
-    const path  = `${slug}/index.html`;
-    const apiUrl = `https://api.github.com/repos/${ghOwner}/${ghRepo}/contents/${path}`;
-    // verifica se já existe (pra pegar o sha e fazer update)
-    let sha = null;
-    const existing = await fetch(apiUrl, {
-      headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json' }
-    });
-    if (existing.ok) { const j = await existing.json(); sha = j.sha; }
-
-    const content = btoa(unescape(encodeURIComponent(siteHtml)));
-    const body = { message: `chore: publica site ${slug}`, content };
-    if (sha) body.sha = sha;
-
-    const pushRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (!pushRes.ok) { const e = await pushRes.json(); fail(`GitHub: ${e.message}`, 'github'); return; }
-  } catch(e) { fail(`GitHub error: ${e.message}`, 'github'); return; }
-
-  // push logo.svg se existir
-  if (logoSvg) {
-    try {
-      const logoPath = `${slug}/logo.svg`;
-      const logoApi  = `https://api.github.com/repos/${ghOwner}/${ghRepo}/contents/${logoPath}`;
-      let   logoSha  = null;
-      const ex = await fetch(logoApi, { headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json' } });
-      if (ex.ok) { const j = await ex.json(); logoSha = j.sha; }
-      const lBody = { message: `chore: logo ${slug}`, content: btoa(unescape(encodeURIComponent(logoSvg))) };
-      if (logoSha) lBody.sha = logoSha;
-      await fetch(logoApi, { method: 'PUT', headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: JSON.stringify(lBody) });
-    } catch(_) {}
-  }
-
-  setStep(1); // commit feito
-
-  // ── STEP 2: deploy no Vercel ──
-  setStep(2);
-  let vercelUrl = null;
-  if (vcToken) {
-    try {
-      const toB64 = s => btoa(unescape(encodeURIComponent(s)));
-      const deployFiles = [
-        { file: 'index.html', data: toB64(siteHtml), encoding: 'base64' }
-      ];
-      if (logoSvg) deployFiles.push({ file: 'logo.svg', data: toB64(logoSvg), encoding: 'base64' });
-
-      const deployRes = await fetch('https://api.vercel.com/v13/deployments', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${vcToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: slug,
-          target: 'production',
-          files: deployFiles,
-          projectSettings: { framework: null }
-        })
-      });
-
-      const d = await deployRes.json();
-      if (!deployRes.ok) {
-        console.warn('[Vercel] Deploy error:', d.error?.message || JSON.stringify(d));
-        // não fatal — cai no fallback GitHub Pages
-      } else {
-        // Usa sempre o alias de produção (slug.vercel.app), não d.url que é deployment-specific
-        vercelUrl = `https://${slug}.vercel.app`;
-        // aguarda deploy propagar (Vercel é rápido, ~5-10s)
-        await new Promise(r => setTimeout(r, 5000));
-        console.log('[Vercel] Deploy OK:', vercelUrl, '| deployment url:', d.url);
-      }
-    } catch(e) {
-      console.warn('[Vercel] Error:', e.message);
-    }
-  } else {
-    console.warn('[Vercel] Token não configurado — pulando deploy Vercel');
-    await new Promise(r => setTimeout(r, 600));
-  }
-
-  // ── STEP 3: URL final ──
-  setStep(3);
-  await new Promise(r => setTimeout(r, 600));
-
-  S.pubSt = 'done';
-  S.pubUrl = vercelUrl || `https://${slug}.vercel.app`;
-  render();
-}
-
 // ── MODAL DE DETALHE ──
 function openDetail(type, key) {
   const modal = document.getElementById('detail-modal');
@@ -2470,25 +2367,24 @@ function downloadSvg(key) {
 // INTEGRAÇÃO AWT — UTILITÁRIOS
 // ═══════════════════════════════════════════════
 
-function genUuid() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
+// Contrato, cliente HTTP e entrega vivem em js/awt-brand.js (compartilhado com o dashboard e coberto por tests/);
+// as conversões que dependem do navegador (PNG, PDF) vivem em js/awt-brand-browser.js.
+
+const esc = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** URL, chave e e-mail do operador só valem juntos: o servidor aceita eventos apenas do dono da chave. */
+function integrationReady() { return !!(S.awtIntUrl && S.awtIntKey && S.operEmail); }
+
+function brandClient() {
+  return AwtBrand.createClient({ baseUrl: S.awtIntUrl, key: S.awtIntKey, operatorEmail: S.operEmail });
 }
 
-function awtHeaders() {
-  return { 'X-Brand-Key': S.awtIntKey, 'Content-Type': 'application/json' };
-}
+const errorText = e => (e instanceof AwtBrand.BrandError ? e.userMessage : e.message);
 
-async function postBrandEvent(payload) {
-  if (!S.awtIntUrl || !S.awtIntKey) return;
-  const event = { event_id: genUuid(), occurred_at: new Date().toISOString(), operator: S.operEmail || S.awtIntKey, ...payload };
-  const res = await fetch(`${S.awtIntUrl}/internal/brand/events`, {
-    method: 'POST', headers: awtHeaders(), body: JSON.stringify(event)
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json().catch(() => ({}));
+/** Eventos que não podem travar o operador (started/failed): a falha vai para o console em vez de sumir em silêncio. */
+function notifyBrand(send) {
+  if (!integrationReady()) return;
+  send(brandClient()).catch(e => console.warn('Evento de branding não enviado:', errorText(e)));
 }
 
 function hashSlug(slug) {
@@ -2498,12 +2394,9 @@ function hashSlug(slug) {
 }
 
 async function loadQueue() {
-  if (!S.awtIntUrl || !S.awtIntKey) return;
+  if (!integrationReady()) return;
   try {
-    const res = await fetch(`${S.awtIntUrl}/internal/brand/queue`, { headers: awtHeaders() });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const list = Array.isArray(data) ? data : (data.partners || data.queue || data.items || []);
+    const list = await brandClient().queue();
     if (!list.length) return;
     // Remove entradas hardcoded (sem _fromApi) ao receber dados da API
     for (let i = PARTNERS.length - 1; i >= 0; i--) {
@@ -2539,19 +2432,24 @@ async function loadQueue() {
         logoUrl: ap.logoUrl || null,
         fotoUrl: ap.fotoUrl || null,
         status: ap.status || 'queued',
+        versaoAtual: ap.versaoAtual,
+        arquivosObrigatorios: ap.arquivosObrigatorios, // o que o servidor exige do painel (o parceiro pode ter mantido o resto)
+        materiais: ap.materiais || null,              // o que o parceiro já tem: { logo|site|cartao|timbrado: { acao, obs, url, arquivo } }
         ajusteComentario: ap.ajusteComentario || null,
         _fromApi: true,
       };
       // Pré-carrega logo se vier da API
       if (mapped.logoUrl && !S.results[pId + '_logo']) {
-        fetch(mapped.logoUrl).then(r => r.text()).then(svg => {
-          if (svg.trim().startsWith('<svg')) {
-            S.results[pId + '_logo'] = svg;
-            S.logoApproved = S.logoApproved || {};
-            S.logoApproved[pId] = true;
-            sst(pId, 'logo', 'done');
-            lsSet('awt_results', S.results);
-          }
+        fetch(mapped.logoUrl).then(r => r.blob()).then(async blob => {
+          const text = await blob.text();
+          // SVG entra como veio; PNG/JPG do parceiro entra embrulhado num SVG, como no envio manual de logo (antes era ignorado)
+          const svg = text.trim().startsWith('<svg') ? text : await AwtBrandBrowser.rasterBlobToSvg(blob);
+          if (!svg) return;
+          S.results[pId + '_logo'] = svg;
+          S.logoApproved = S.logoApproved || {};
+          S.logoApproved[pId] = true;
+          sst(pId, 'logo', 'done');
+          lsSet('awt_results', S.results);
         }).catch(()=>{});
       }
       // Pré-carrega fotoUrl em fotoCorpInput (expira em 1h, baixar logo)
@@ -2564,7 +2462,7 @@ async function loadQueue() {
           });
         }).then(dataUrl => {
           S.fotoCorpInput = S.fotoCorpInput || {};
-          S.fotoCorpInput[pId] = { dataUrl, mime: 'image/png', name: 'foto-banker.png' };
+          S.fotoCorpInput[pId] = { dataUrl, mime: blob.type, name: 'foto-banker' }; // o tipo real: o parceiro pode ter enviado JPEG
         }).catch(()=>{});
       }
       const idx = PARTNERS.findIndex(x => x.partnerId === mapped.partnerId || x.slug === mapped.slug);
@@ -2573,166 +2471,79 @@ async function loadQueue() {
     });
     render();
   } catch(e) {
-    alert('Erro ao carregar fila: ' + e.message);
+    alert('Erro ao carregar fila: ' + errorText(e));
   }
 }
 
 
-async function svgToPngBlob(svgStr, w = 600, h = 300, whiteVersion = false) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    let svg = svgStr;
-    if (whiteVersion) {
-      svg = svg.replace(/fill="(?!none|transparent)[^"]+"/g, 'fill="white"').replace(/fill:#[0-9a-fA-F]{3,6}/g, 'fill:white').replace(/color:#[0-9a-fA-F]{3,6}/g, 'color:white');
-    }
-    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    img.onload = () => {
-      const cv = document.createElement('canvas');
-      cv.width = w; cv.height = h;
-      const ctx = cv.getContext('2d');
-      if (whiteVersion) { ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, w, h); }
-      ctx.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      cv.toBlob(b => { if (b) resolve(b); else reject(new Error('canvas toBlob failed')); }, 'image/png');
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
-    img.src = url;
-  });
-}
+// ── PUBLICAR (executa) ──
+// De onde sai cada arquivo (na ordem de envio). `result` é a chave em S.results; `make` produz o Blob.
+const PUBLISH_SOURCES = [
+  { kind: 'logo_svg',        icon: '🎨', result: 'logo',          make: svg => new Blob([svg], { type: 'image/svg+xml' }) },
+  { kind: 'logo_png',        icon: '🎨', result: 'logo',          make: svg => AwtBrandBrowser.svgToPngBlob(svg) },
+  { kind: 'logo_branco_png', icon: '🎨', result: 'logo',          make: svg => AwtBrandBrowser.svgToPngBlob(svg, { white: true }) },
+  { kind: 'cartao_pdf',      icon: '🪪', result: 'cartao',        make: html => AwtBrandBrowser.htmlToPdfBlob(html) },
+  { kind: 'timbrado_pdf',    icon: '📄', result: 'papelTimbrado', make: html => AwtBrandBrowser.htmlToPdfBlob(html) },
+  { kind: 'site_html',       icon: '🌐', result: 'site',          make: html => new Blob([html], { type: 'text/html' }) },
+  { kind: 'foto_png',        icon: '📸', result: 'fotoCorp',      make: dataUrl => AwtBrandBrowser.dataUrlToBlob(dataUrl) },
+];
+const PUBLISH_CHECKLIST = { nome_marca: 'ec1', cor_primaria: 'ec2', whatsapp: 'ec3', disclaimer: 'ec4', sem_palavras_proibidas: 'ec5', especialidades: 'ec6' };
 
-async function htmlToPdfBlob(htmlStr) {
-  if (!window.html2pdf) {
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
-    });
-  }
-  const div = document.createElement('div');
-  div.innerHTML = htmlStr;
-  div.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;';
-  document.body.appendChild(div);
-  try {
-    const opt = { margin: 0, filename: 'doc.pdf', html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-    const pdf = await html2pdf().set(opt).from(div).toPdf().get('pdf');
-    const ab = pdf.output('arraybuffer');
-    return new Blob([ab], { type: 'application/pdf' });
-  } finally { document.body.removeChild(div); }
-}
-async function animateEntrega(pid) {
+const publishResult = (p, source) => S.results[`${p.id}_${source.result}`];
+const publishFiles = p => PUBLISH_SOURCES.filter(source => publishResult(p, source) && !kindKept(p, source.kind)); // o que o parceiro manteve não se publica
+const publishChecklist = () => Object.fromEntries(
+  Object.entries(PUBLISH_CHECKLIST).map(([name, id]) => [name, !!document.getElementById(id)?.checked]));
+const publishPartner = p => ({
+  partnerId: p.partnerId, slug: p.slug, nomeMarca: p.nomeMarca, servicos: p.ativos, versaoAtual: p.versaoAtual,
+  arquivosObrigatorios: p.arquivosObrigatorios,
+  keptSiteUrl: materialKept(p, 'site') ? partnerMaterial(p, 'site').url : undefined, // site mantido: é o site público, sem deploy
+});
+
+/** Só parceira que veio da fila (tem partnerId) é entregue ao onboarding; parceira de teste publica sem entregar. */
+const publishClient = p => (p.partnerId ? brandClient() : undefined);
+
+/**
+ * Publica o escritório: tudo ou nada, na ordem preparar → GitHub → Vercel → onboarding (AwtPublish.publishOffice).
+ * Toda a configuração (tokens, integração) é conferida ANTES de publicar qualquer coisa. O `checklist` é lido do DOM
+ * pelo clique, antes de a tela ser redesenhada.
+ */
+async function animatePublish(pid, checklist) {
   const p = gp(pid);
-  if (!p) throw new Error('Parceiro não encontrado');
-  if (!S.awtIntUrl || !S.awtIntKey) throw new Error('Integração não configurada');
+  if (!p) return;
+  const pub = S.pub[pid] = { state: 'running', row: 0, error: null, result: null };
+  render();
 
-  const log = document.getElementById('entrega-log');
-  const errBox = document.getElementById('entrega-error');
-  const prog = document.getElementById('entrega-progress');
-  if (prog) prog.style.display = 'block';
-  if (errBox) errBox.style.display = 'none';
-  const addLog = msg => { if (log) log.innerHTML += `<div>${msg}</div>`; };
-
-  const pubUrl = S.pubUrl || `https://${p.slug}.vercel.app`;
-  const ghUrl = `https://github.com/awt-mkt-hub/awt-mkt-hub.github.io/tree/main/${p.slug}`;
-
-  // Build files list — includes PNG versions derived from SVG logo
-  const fileKinds = [
-    { kind: 'logo_svg',      key: p.id + '_logo',          contentType: 'image/svg+xml' },
-    { kind: 'logo_png',      key: p.id + '_logo',          contentType: 'image/png',    isPng: true, whiteVersion: false },
-    { kind: 'logo_branco_png', key: p.id + '_logo',        contentType: 'image/png',    isPng: true, whiteVersion: true },
-    { kind: 'cartao_pdf',    key: p.id + '_cartao',         contentType: 'application/pdf', isPdf: true },
-    { kind: 'timbrado_pdf',  key: p.id + '_papelTimbrado',  contentType: 'application/pdf', isPdf: true },
-    { kind: 'site_html',     key: p.id + '_site',           contentType: 'text/html' },
-    { kind: 'foto_png',      key: p.id + '_fotoCorp',       contentType: 'image/png',    isDataUrl: true },
-  ].filter(f => !!S.results[f.key]);
-
-  const uploadedFiles = [];
-
-  for (const f of fileKinds) {
-    addLog(`⟳ Preparando ${f.kind}…`);
-    const content = S.results[f.key];
-    let blob;
-    if (f.isPdf) {
-      try { blob = await htmlToPdfBlob(content); }
-      catch(e) { addLog(`⚠ HTML→PDF falhou para ${f.kind}: ${e.message}`); continue; }
-    } else if (f.isPng) {
-      try { blob = await svgToPngBlob(content, 600, 300, f.whiteVersion); }
-      catch(e) { addLog(`⚠ SVG→PNG falhou para ${f.kind}: ${e.message}`); continue; }
-    } else if (f.isDataUrl && content.startsWith('data:')) {
-      const b64 = content.split(',')[1];
-      const bytes = atob(b64);
-      const arr = new Uint8Array(bytes.length);
-      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-      blob = new Blob([arr], { type: f.contentType });
-    } else {
-      blob = new Blob([content], { type: f.contentType });
-    }
-
-    addLog(`⟳ Solicitando URL de upload para ${f.kind}…`);
-    const urlRes = await fetch(`${S.awtIntUrl}/internal/brand/upload-url`, {
-      method: 'POST', headers: awtHeaders(),
-      body: JSON.stringify({ partnerId: p.partnerId, kind: f.kind, filename: `${p.slug}-${f.kind}`, content_type: f.contentType, size_bytes: blob.size })
+  try {
+    const result = await AwtPublish.publishOffice({
+      partner: publishPartner(p),
+      sources: Object.fromEntries(publishFiles(p).map(source => [source.kind, () => source.make(publishResult(p, source))])),
+      checklist,
+      client: publishClient(p),
+      github: publishFiles(p).length ? AwtPublish.createGithubPublisher({ token: S.githubToken }) : undefined, // sem arquivo, sem pasta
+      vercel: publishPartner(p).keptSiteUrl ? undefined : AwtPublish.createVercelPublisher({ token: S.vercelToken }), // site mantido: sem deploy
+      toPng: AwtBrandBrowser.imageBlobToPng,
+      onProgress: ({ stage }) => {
+        if (pub.row !== PUB_STAGE_ROW[stage]) { pub.row = PUB_STAGE_ROW[stage]; render(); }
+      },
     });
-    if (urlRes.status === 409) {
-      try {
-        const conflict = await urlRes.json();
-        const eid = conflict.file_id || conflict.id;
-        if (eid) { uploadedFiles.push({ kind: f.kind, file_id: eid }); addLog(`↩ ${f.kind} já enviado (reutilizando)`); }
-        else { addLog(`⚠ ${f.kind} conflito 409 sem file_id na resposta`); }
-      } catch(e) { addLog(`⚠ ${f.kind} conflito 409: ${e.message}`); }
-      continue;
-    }
-    if (!urlRes.ok) { addLog(`⚠ upload-url retornou ${urlRes.status} — pulando ${f.kind}`); continue; }
-    const { file_id, upload_url } = await urlRes.json();
-
-    addLog(`⟳ Enviando ${f.kind} (${Math.round(blob.size/1024)}KB)…`);
-    try {
-      const putRes = await fetch(upload_url, { method: 'PUT', body: blob, headers: { 'Content-Type': f.contentType } });
-      if (putRes.ok) { uploadedFiles.push({ kind: f.kind, file_id }); addLog(`✓ ${f.kind} enviado`); }
-      else { addLog(`⚠ Upload HTTP ${putRes.status} para ${f.kind}`); uploadedFiles.push({ kind: f.kind, file_id }); }
-    } catch(e) { addLog(`⚠ Erro de rede em ${f.kind}: ${e.message}`); uploadedFiles.push({ kind: f.kind, file_id }); }
+    pub.state = 'done';
+    pub.result = result;
+    if (result.delivered) p.versaoAtual = result.delivered.version;
+  } catch (e) {
+    console.error('Publicação falhou:', e);
+    pub.state = 'error';
+    pub.error = errorText(e);
+    if (e instanceof AwtPublish.PublishError && p.partnerId) notifyBrand(client => client.failed(p.partnerId, e.step, pub.error));
   }
-
-  addLog(`⟳ Registrando entrega…`);
-  const version = (S.deliveryVersion[pid] || 0) + 1;
-
-  // Checklist from checkboxes
-  const getChk = id => !!(document.getElementById(id) && document.getElementById(id).checked);
-  const checklist = {
-    nome_marca: getChk('ec1'),
-    cor_primaria: getChk('ec2'),
-    whatsapp: getChk('ec3'),
-    disclaimer: getChk('ec4'),
-    sem_palavras_proibidas: getChk('ec5'),
-    especialidades: getChk('ec6'),
-  };
-
-  await postBrandEvent({
-    type: 'brand.delivered',
-    partnerId: p.partnerId,
-    version,
-    site: { slug: p.slug, pubUrl, githubUrl: ghUrl },
-    files: uploadedFiles,
-    checklist,
-    notes: '',
-  });
-
-  addLog(`✅ Entregue com sucesso — versão ${version}`);
-
-  S.deliveryVersion[pid] = version;
-  lsSet('awt_delivery_version', S.deliveryVersion);
-  const now = new Date();
-  const ts = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  S.results[pid + '_entrega_sent'] = true;
-  S.results[pid + '_entrega_sent_at'] = ts;
+  render();
 }
+
 
 // ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
 render();
-if (S.awtIntUrl && S.awtIntKey) {
+if (integrationReady()) {
   loadQueue();
   setInterval(loadQueue, 2 * 60 * 1000);
 }

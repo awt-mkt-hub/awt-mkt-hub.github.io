@@ -1,0 +1,8 @@
+{
+  "name": "awt-mkt-hub",
+  "private": true,
+  "description": "Painel de Branding AWT (site estático). O package.json existe só para rodar os testes: npm test",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  }
+}

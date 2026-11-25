@@ -641,10 +641,11 @@
 <!-- Toast container -->
 <div id="toast-container"></div>
 
+<script src="js/awt-brand.js"></script>
+<script src="js/awt-brand-browser.js"></script>
 <script>
-// ── Config ──────────────────────────────────────────────────────────────────
-const API_BASE = 'https://awt-onboarding-services-365707580016.us-central1.run.app';
-
+// ── Config ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Contrato com o onboarding (tipos de arquivo, cliente HTTP, regras da entrega): js/awt-brand.js, compartilhado com o index.html.
 const OPERATORS = {
   thiago: {
     name: 'Thiago Befi',
@@ -658,29 +659,16 @@ const OPERATORS = {
   }
 };
 
-const REQUIRED_KINDS = ['logo_png', 'logo_branco_png', 'cartao_pdf', 'timbrado_pdf', 'site_html'];
-const OPTIONAL_KINDS = ['logo_svg'];
-const CONDITIONAL_KINDS = ['foto_png']; // only when fotos-ai in services
-
-const KIND_LABELS = {
-  logo_png: 'Logo PNG',
-  logo_branco_png: 'Logo Branco PNG',
-  logo_svg: 'Logo SVG',
-  cartao_pdf: 'Cartão PDF',
-  timbrado_pdf: 'Timbrado PDF',
-  site_html: 'Site HTML',
-  foto_png: 'Foto PNG'
+// O que o seletor de arquivo oferece por formato. Fotos e logos PNG aceitam JPEG/WebP porque o painel converte para PNG de verdade.
+const ACCEPT_BY_FORMAT = {
+  png: '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp',
+  svg: '.svg,image/svg+xml',
+  pdf: '.pdf,application/pdf',
+  html: '.html,.htm,text/html'
 };
-
-const KIND_ACCEPT = {
-  logo_png: '.png,image/png',
-  logo_branco_png: '.png,image/png',
-  logo_svg: '.svg,image/svg+xml',
-  cartao_pdf: '.pdf,application/pdf',
-  timbrado_pdf: '.pdf,application/pdf',
-  site_html: '.html,text/html',
-  foto_png: '.png,image/png'
-};
+const kindLabel = kind => AwtBrand.KINDS[kind].label;
+const kindAccept = kind => ACCEPT_BY_FORMAT[AwtBrand.KINDS[kind].format];
+const optionalKinds = () => Object.keys(AwtBrand.KINDS).filter(kind => AwtBrand.KINDS[kind].required === 'never');
 
 // ── State ────────────────────────────────────────────────────────────────────
 const STATE_KEY = 'awt_brand_ops_v1';
@@ -690,7 +678,7 @@ function getState() {
 }
 
 function getPartnerState(slug) {
-  return getState()[slug] || { step: 0, version: 1, files: {}, status: 'pending' };
+  return getState()[slug] || { step: 0, files: {}, status: 'pending' };
   // step: 0=not started, 1=started, 2=uploading, 3=ready to deliver, 4=delivered, -1=failed
 }
 
@@ -708,36 +696,26 @@ function onOperatorChange() {
   loadAll();
 }
 
-// ── API helpers ──────────────────────────────────────────────────────────────
-async function apiFetch(path, opts = {}) {
+// ── API ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Chave e e-mail são do mesmo operador: o servidor só aceita eventos cujo operador é o dono da chave.
+function currentClient() {
   const op = currentOperator();
-  const res = await fetch(API_BASE + path, {
-    ...opts,
-    headers: {
-      'X-Brand-Key': op.key,
-      'Content-Type': 'application/json',
-      ...(opts.headers || {})
-    }
-  });
-  if (!res.ok) {
-    let body = '';
-    try { body = JSON.stringify(await res.json()); } catch {}
-    throw new Error(`HTTP ${res.status}: ${body}`);
-  }
-  return res.json();
+  return AwtBrand.createClient({ key: op.key, operatorEmail: op.email });
 }
 
-function uuid() {
-  return crypto.randomUUID ? crypto.randomUUID()
-    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0;
-        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-      });
-}
+const errorText = e => (e instanceof AwtBrand.BrandError ? e.userMessage : e.message);
+const esc = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function isoNow() {
-  return new Date().toISOString().slice(0, 19) + 'Z';
+// O que o parceiro já tem (vem da fila). `acao`: manter = não refazer; ajustar = partir do que ele enviou; criar = o time cria.
+const MATERIAL_LABEL = { logo: 'Logo', site: 'Site', cartao: 'Cartão de visita', timbrado: 'Papel timbrado' };
+const MATERIAL_ACTION = { manter: '✅ Manter como está (não refazer)', ajustar: '✏️ Ajustar o que ele enviou', criar: '🎨 Criar' };
+function materialRows(item) {
+  return Object.entries(item.materiais || {}).map(([key, m]) => `<tr><td>${MATERIAL_LABEL[key] || esc(key)}</td><td>${MATERIAL_ACTION[m.acao] || esc(m.acao)}`
+    + `${m.url ? ` — <a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.arquivo || m.url)} ↗</a>` : ''}`
+    + `${m.obs ? `<div style="margin-top:3px"><strong>Pedido:</strong> ${esc(m.obs)}</div>` : ''}</td></tr>`);
 }
+/** O site que o parceiro mantém é o site público: não há outro endereço para informar. */
+const keptSiteUrl = item => (item.materiais && item.materiais.site && item.materiais.site.acao === 'manter' ? item.materiais.site.url : null);
 
 // ── Load ─────────────────────────────────────────────────────────────────────
 let queueData = [];
@@ -751,8 +729,7 @@ async function loadQueue() {
   const el = document.getElementById('queueList');
   el.innerHTML = '<div class="empty"><div class="spin"></div></div>';
   try {
-    const data = await apiFetch('/internal/brand/queue');
-    const items = Array.isArray(data) ? data : (data.partners || data.queue || data.items || []);
+    const items = await currentClient().queue();
     queueData = items;
     document.getElementById('queueBadge').textContent = items.length;
     if (!items.length) {
@@ -769,8 +746,7 @@ async function loadDeliveries() {
   const el = document.getElementById('deliveriesList');
   el.innerHTML = '<div class="empty"><div class="spin"></div></div>';
   try {
-    const data = await apiFetch('/internal/brand/deliveries?dias=14');
-    const items = Array.isArray(data) ? data : (data.deliveries || data.items || []);
+    const items = await currentClient().deliveries(14);
     document.getElementById('deliveriesBadge').textContent = items.length;
     if (!items.length) {
       el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>Sem entregas nos últimos 14 dias</div>';
@@ -789,7 +765,6 @@ function renderQueueCard(item) {
   const banker = item.nomeBanker || item.primeiroNome || '';
   const partnerId = item.partnerId || item.id || slug;
   const services = item.servicos || item.services || [];
-  const hasFotos = Array.isArray(services) && services.some(s => String(s).includes('foto'));
   const entradaAt = item.created_at || item.entradaAt || item.createdAt || '';
   const apiStatus = item.status || '';
   const ajusteComentario = item.ajusteComentario || '';
@@ -846,12 +821,12 @@ function renderQueueCard(item) {
       </svg>
     </div>
     <div class="card-body" id="body-${slug}">
-      ${renderCardBody(slug, partnerId, name, hasFotos, ps, item)}
+      ${renderCardBody(slug, partnerId, name, ps, item)}
     </div>
   </div>`;
 }
 
-function renderCardBody(slug, partnerId, name, hasFotos, ps, item) {
+function renderCardBody(slug, partnerId, name, ps, item) {
   item = item || {};
   // Briefing info section
   const cor1 = item.corHex ? `#${item.corHex}` : '';
@@ -890,6 +865,7 @@ function renderCardBody(slug, partnerId, name, hasFotos, ps, item) {
     missao ? `<tr><td>Missão</td><td>${missao}</td></tr>` : '',
     perfil ? `<tr><td>Bio/Sobre</td><td style="white-space:pre-wrap">${perfil}</td></tr>` : '',
     fotoTratamento ? `<tr><td>Foto</td><td>${fotoTratamento === 'ia' ? '✅ Tratamento IA autorizado' : '📷 Original (sem IA)'}</td></tr>` : '',
+    ...materialRows(item),
   ].filter(Boolean).join('');
 
   const briefingHtml = briefingRows ? `
@@ -906,23 +882,23 @@ function renderCardBody(slug, partnerId, name, hasFotos, ps, item) {
   const step2done = ['delivered'].includes(ps.status);
 
   // Required files for this partner
-  const requiredForThis = [...REQUIRED_KINDS, ...(hasFotos ? CONDITIONAL_KINDS : [])];
+  const requiredForThis = AwtBrand.requiredFor(item); // o servidor diz o que falta entregar (o parceiro pode ter mantido o resto)
   const allRequired = requiredForThis.every(k => ps.files[k]);
 
-  const filesHtml = [...requiredForThis, ...OPTIONAL_KINDS].map(kind => {
+  const filesHtml = [...requiredForThis, ...optionalKinds()].map(kind => {
     const isRequired = requiredForThis.includes(kind);
     const hasFile = !!ps.files[kind];
     return `
     <div class="file-item ${hasFile ? 'uploaded' : ''}" id="file-item-${slug}-${kind}">
       <div class="file-kind">
-        ${KIND_LABELS[kind]}
+        ${kindLabel(kind)}
         <span class="${isRequired ? 'req' : 'opt'}">${isRequired ? '✱' : 'opc'}</span>
         ${hasFile ? '✓' : ''}
       </div>
       <div class="file-input-wrap">
         <label class="file-input-label ${hasFile ? 'has-file' : ''}" id="file-label-${slug}-${kind}">
           <span id="file-label-text-${slug}-${kind}">${hasFile ? '✓ Enviado' : '+ Selecionar'}</span>
-          <input class="file-input-real" type="file" accept="${KIND_ACCEPT[kind]}"
+          <input class="file-input-real" type="file" accept="${kindAccept(kind)}"
             onchange="onFileSelected('${slug}','${partnerId}','${kind}',this)"
             ${ps.status === 'delivered' ? 'disabled' : ''}>
         </label>
@@ -978,10 +954,9 @@ function refreshCard(slug) {
   const partnerId = item.partnerId || item.id || slug;
   const name = item.nomeMarca || item.nome || item.name || item.partnerName || slug;
   const services = item.servicos || item.services || [];
-  const hasFotos = Array.isArray(services) && services.some(s => String(s).includes('foto'));
   const ps = getPartnerState(slug);
   const body = document.getElementById(`body-${slug}`);
-  if (body) body.innerHTML = renderCardBody(slug, partnerId, name, hasFotos, ps, item);
+  if (body) body.innerHTML = renderCardBody(slug, partnerId, name, ps, item);
 
   // Update status dot
   const st = { label: '', cls: '' };
@@ -1030,32 +1005,17 @@ function renderDelivery(item) {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 async function startPartner(slug, partnerId, name) {
-  const op = currentOperator();
   const btn = event.target;
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Enviando...';
 
   try {
-    const payload = {
-      event_id: uuid(),
-      type: 'brand.started',
-      partnerId,
-      operator: op.email,
-      occurred_at: isoNow()
-    };
-    const res = await apiFetch('/internal/brand/events', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    if (res.duplicate) {
-      toast('info', 'Evento já registrado anteriormente');
-    } else {
-      toast('success', `✓ Briefing iniciado para ${name}`);
-    }
-    savePartnerState(slug, { status: 'started', version: 1 });
+    const res = await currentClient().started(partnerId);
+    toast(res.duplicate ? 'info' : 'success', res.duplicate ? 'Evento já registrado anteriormente' : `✓ Briefing iniciado para ${name}`);
+    savePartnerState(slug, { status: 'started' });
     refreshCard(slug);
   } catch (e) {
-    toast('error', e.message);
+    toast('error', errorText(e));
     btn.disabled = false;
     btn.innerHTML = '▶ Iniciar Briefing';
   }
@@ -1071,123 +1031,63 @@ async function onFileSelected(slug, partnerId, kind, input) {
   const itemEl = document.getElementById(`file-item-${slug}-${kind}`);
 
   progEl.className = 'file-progress uploading';
-  progEl.textContent = 'Solicitando URL...';
+  progEl.textContent = 'Conferindo arquivo...';
   input.disabled = true;
 
   try {
-    // Step 1: request upload URL
-    const op = currentOperator();
-    const urlRes = await apiFetch('/internal/brand/upload-url', {
-      method: 'POST',
-      body: JSON.stringify({
-        partnerId,
-        kind,
-        filename: file.name,
-        content_type: file.type || 'application/octet-stream',
-        size_bytes: file.size
-      })
-    });
-
-    const { file_id, upload_url, headers: uploadHeaders } = urlRes;
-
+    // Confere o conteúdo como o servidor vai conferir; JPEG/WebP num campo PNG é convertido para PNG de verdade.
+    const blob = await AwtBrand.prepareForKind(kind, file, { toPng: AwtBrandBrowser.imageBlobToPng });
     progEl.textContent = 'Enviando arquivo...';
+    const { file_id } = await currentClient().uploadFile({ partnerId, kind, filename: file.name, blob });
 
-    // Step 2: PUT file bytes
-    const putRes = await fetch(upload_url, {
-      method: 'PUT',
-      headers: { 'Content-Type': uploadHeaders['Content-Type'] || file.type },
-      body: file
-    });
-
-    if (!putRes.ok) throw new Error(`Upload falhou: HTTP ${putRes.status}`);
-
-    // Save file_id
     const ps = getPartnerState(slug);
     const newFiles = { ...ps.files, [kind]: file_id };
-    const requiredForThis = [...REQUIRED_KINDS];
-    // check if fotos needed
     const item = queueData.find(i => (i.slug || i.partnerId || i.id) === slug);
-    if (item) {
-      const services = item.servicos || item.services || [];
-      if (Array.isArray(services) && services.some(s => String(s).includes('foto'))) {
-        requiredForThis.push('foto_png');
-      }
-    }
-    const allUploaded = requiredForThis.every(k => newFiles[k]);
-    const newStatus = allUploaded ? 'ready' : 'uploading';
-    savePartnerState(slug, { files: newFiles, status: newStatus });
+    const allUploaded = AwtBrand.requiredFor(item || {}).every(k => newFiles[k]);
+    savePartnerState(slug, { files: newFiles, status: allUploaded ? 'ready' : 'uploading' });
 
     progEl.className = 'file-progress done';
-    progEl.textContent = `✓ ${(file.size / 1024).toFixed(0)} KB`;
+    progEl.textContent = `✓ ${(blob.size / 1024).toFixed(0)} KB${blob === file ? '' : ' · ajustado ao formato exigido'}`;
     labelEl.classList.add('has-file');
     labelTextEl.textContent = '✓ Enviado';
     itemEl.classList.add('uploaded');
 
-    if (allUploaded) {
-      toast('success', 'Todos os arquivos enviados! Pronto para entregar.');
-    } else {
-      toast('info', `${KIND_LABELS[kind]} enviado`);
-    }
-
+    toast(allUploaded ? 'success' : 'info', allUploaded ? 'Todos os arquivos enviados! Pronto para entregar.' : `${kindLabel(kind)} enviado`);
     refreshCard(slug);
   } catch (e) {
     progEl.className = 'file-progress error';
-    progEl.textContent = `✗ ${e.message}`;
+    progEl.textContent = `✗ ${errorText(e)}`;
     input.disabled = false;
-    toast('error', e.message);
+    toast('error', errorText(e));
   }
 }
 
 async function deliverPartner(slug, partnerId) {
   const ps = getPartnerState(slug);
-  const op = currentOperator();
   const item = queueData.find(i => (i.slug || i.partnerId || i.id) === slug);
   if (!item) return;
-
-  // Build files array
-  const filesArr = Object.entries(ps.files).map(([kind, file_id]) => ({ kind, file_id }));
-
-  // Build site info — prompt if not in queue data
-  const pubUrl = item.pubUrl || item.siteUrl || `https://awt-mkt-hub.github.io/${slug}`;
-  const githubUrl = item.githubUrl || `https://github.com/ThiagoBAWT/${slug}`;
 
   const btn = event.target;
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Entregando...';
 
   try {
-    const payload = {
-      event_id: uuid(),
-      type: 'brand.delivered',
-      partnerId,
-      operator: op.email,
-      occurred_at: isoNow(),
-      site: { slug, pubUrl, githubUrl },
-      files: filesArr,
-      checklist: {},
-      notes: ''
-    };
-
-    const res = await apiFetch('/internal/brand/events', {
-      method: 'POST',
-      body: JSON.stringify(payload)
+    AwtBrand.assertComplete(item, Object.keys(ps.files));
+    const res = await currentClient().delivered(partnerId, {
+      version: AwtBrand.nextVersion(item), // a fila informa a última versão entregue
+      site: {
+        slug,
+        pubUrl: keptSiteUrl(item) || item.pubUrl || item.siteUrl || `https://awt-mkt-hub.github.io/${slug}` // sem githubUrl: o dashboard não publica pasta no GitHub
+      },
+      files: Object.entries(ps.files).map(([kind, file_id]) => ({ kind, file_id }))
     });
 
-    if (res.duplicate) {
-      toast('info', 'Entrega já registrada');
-    } else {
-      toast('success', '🚀 Entrega registrada com sucesso!');
-    }
-
-    savePartnerState(slug, { status: 'delivered', version: (ps.version || 1) + 1 });
+    toast(res.duplicate ? 'info' : 'success', res.duplicate ? 'Entrega já registrada' : '🚀 Entrega registrada com sucesso!');
+    savePartnerState(slug, { status: 'delivered' });
     refreshCard(slug);
     setTimeout(loadDeliveries, 1000);
   } catch (e) {
-    // Parse known errors
-    let msg = e.message;
-    if (msg.includes('version_mismatch')) msg = 'Conflito de versão — atualize a fila';
-    if (msg.includes('incomplete_delivery')) msg = 'Faltam arquivos obrigatórios';
-    toast('error', msg);
+    toast('error', errorText(e));
     btn.disabled = false;
     btn.innerHTML = '🚀 Entregar';
   }
@@ -1210,8 +1110,6 @@ async function submitFail() {
   const partnerId = document.getElementById('failPartnerId').value;
   const step = document.getElementById('failStep').value;
   const error = document.getElementById('failError').value.trim();
-  const op = currentOperator();
-  const ps = getPartnerState(slug);
 
   if (!error) { toast('error', 'Descreva o erro'); return; }
 
@@ -1220,23 +1118,13 @@ async function submitFail() {
   btn.innerHTML = '<span class="spin"></span>';
 
   try {
-    const payload = {
-      event_id: uuid(),
-      type: 'brand.failed',
-      partnerId,
-      operator: op.email,
-      occurred_at: isoNow(),
-      step,
-      error
-    };
-
-    await apiFetch('/internal/brand/events', { method: 'POST', body: JSON.stringify(payload) });
+    await currentClient().failed(partnerId, step, error);
     toast('success', 'Falha registrada');
-    savePartnerState(slug, { status: 'failed', version: (ps.version || 1) + 1 });
+    savePartnerState(slug, { status: 'failed' });
     closeFailModal();
     refreshCard(slug);
   } catch (e) {
-    toast('error', e.message);
+    toast('error', errorText(e));
   } finally {
     btn.disabled = false;
     btn.innerHTML = 'Registrar Falha';

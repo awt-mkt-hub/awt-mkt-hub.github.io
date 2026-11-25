@@ -377,3 +377,55 @@ test('Publicar: o que ainda é obrigatório continua barrado antes de qualquer c
   await assert.rejects(ctx.run(), e => e instanceof B.BrandFileError && e.missing.includes('cartao_pdf'));
   assert.deepEqual(ctx.order, []);
 });
+
+// ── Registro do que veio do parceiro: tudo de cada cliente fica documentado na pasta ─────────────────────────────────────
+const manifestOf = () => blob(JSON.stringify({ escritorio: 'Teste Wealth', materiais: { logo: { acao: 'manter' } } }), 'application/json');
+const archiveOf = () => ({
+  'originais-do-parceiro/logo': async () => blob(PNG, 'image/png'),
+  'originais-do-parceiro/foto': async () => blob(JPEG, 'application/octet-stream'),
+  'originais-do-parceiro/cartao': async () => blob(ascii('%PDF-1.4 cartao do parceiro')),
+  'materiais-do-parceiro.json': async () => manifestOf(),
+});
+
+test('Publicar grava na pasta os originais do parceiro e o manifesto, com a extensão certa pelo conteúdo', async () => {
+  const ctx = await publish({ archive: archiveOf() });
+  await ctx.run();
+  const paths = ctx.repo.paths();
+  for (const expected of ['originais-do-parceiro/logo.png', 'originais-do-parceiro/foto.jpg', 'originais-do-parceiro/cartao.pdf', 'materiais-do-parceiro.json']) {
+    assert.ok(paths.includes(`Teste Wealth/${expected}`), expected);
+  }
+  assert.deepEqual([...ctx.repo.read('Teste Wealth/originais-do-parceiro/foto.jpg')], JPEG, 'os bytes originais, sem reencodar');
+  assert.ok(paths.includes('Teste Wealth/index.html'), 'o que o marketing produziu continua na mesma pasta');
+  assert.equal(Object.keys(ctx.repo.commits).length, 2, 'um único commit para tudo');
+});
+
+test('Publicar com tudo mantido ainda grava os originais e o manifesto (a pasta documenta o cliente)', async () => {
+  const kept = partner({ keptSiteUrl: KEPT_SITE, arquivosObrigatorios: [] });
+  const ctx = await publish({ partner: kept, sources: {}, archive: archiveOf() });
+  const result = await ctx.run();
+  assert.deepEqual(ctx.order, ['github', 'onboarding'], 'sem Vercel (site do parceiro), mas com GitHub');
+  assert.ok(result.git && result.git.changed);
+  assert.deepEqual(ctx.repo.paths().filter(p => !p.endsWith('publicacao.json')).length, 4);
+  const event = ctx.onboarding.fetchImpl.calls.find(c => c.url.endsWith('/events')).body;
+  assert.deepEqual(event.files, [], 'o onboarding já tem esses arquivos: nada a reenviar');
+  assert.ok(event.site.githubUrl);
+});
+
+test('Publicar: se um arquivo do parceiro não puder ser obtido, nada é publicado', async () => {
+  const archive = { ...archiveOf(), 'originais-do-parceiro/logo': async () => { throw new Error('link expirado'); } };
+  const ctx = await publish({ archive });
+  await assert.rejects(ctx.run(), error => {
+    assert.ok(error instanceof B.BrandFileError);
+    assert.match(error.userMessage, /não foi possível obter originais-do-parceiro\/logo \(link expirado\)/);
+    return true;
+  });
+  assert.deepEqual(ctx.order, [], 'pasta incompleta não serve como documentação');
+});
+
+test('extensionOf escolhe a extensão pelo conteúdo, não pelo nome', async () => {
+  assert.equal(await B.extensionOf(blob(PNG)), 'png');
+  assert.equal(await B.extensionOf(blob(JPEG)), 'jpg');
+  assert.equal(await B.extensionOf(blob(ascii('%PDF-1.7 x'))), 'pdf');
+  assert.equal(await B.extensionOf(blob('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), 'svg');
+  assert.equal(await B.extensionOf(blob([1, 2, 3])), 'bin');
+});

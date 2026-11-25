@@ -1260,7 +1260,7 @@ function rRevisao(p, step, si, steps) {
 // Um clique publica tudo: pasta do escritório no GitHub, site no Vercel e entrega ao onboarding (js/awt-publish.js).
 const PUB_STEPS = [
   { icon: '🧩', label: 'Preparar arquivos',     detail: () => 'Confere logo, cartão, papel timbrado, site e foto antes de publicar' },
-  { icon: '🐙', label: 'Pasta no GitHub',       detail: p => (publishFiles(p).length ? `${AwtPublish.GITHUB.owner}/${AwtPublish.GITHUB.repo} / ${AwtPublish.folderName(p.nomeMarca, p.slug)}/` : 'Nada a publicar: o parceiro manteve os materiais') },
+  { icon: '🐙', label: 'Pasta no GitHub',       detail: p => (hasGithubContent(p) ? `${AwtPublish.GITHUB.owner}/${AwtPublish.GITHUB.repo} / ${AwtPublish.folderName(p.nomeMarca, p.slug)}/ (materiais, originais do parceiro e manifesto)` : 'Nada a publicar') },
   { icon: '▲',  label: 'Deploy no Vercel',      detail: p => (publishPartner(p).keptSiteUrl ? `Não há deploy: o site é o do parceiro (${publishPartner(p).keptSiteUrl})` : `${p.slug}.vercel.app`) },
   { icon: '📤', label: 'Entrega ao onboarding', detail: p => (!p.partnerId ? 'Parceira sem vínculo com o onboarding: não é entregue' : publishFiles(p).length ? 'Envia os mesmos arquivos e registra a versão' : 'Confirma que o parceiro manteve os materiais (nada a enviar)') },
 ];
@@ -1275,7 +1275,7 @@ const PUB_ROW_VIEW = {
 
 /** Etapa que não se aplica a esta parceira: nada a subir no GitHub, site do parceiro mantido (sem Vercel) ou sem vínculo com o onboarding. */
 function pubRowSkipped(p, i) {
-  return (i === PUB_STAGE_ROW.github && !publishFiles(p).length)
+  return (i === PUB_STAGE_ROW.github && !hasGithubContent(p))
     || (i === PUB_STAGE_ROW.vercel && !!publishPartner(p).keptSiteUrl)
     || (i === PUB_STAGE_ROW.onboarding && !p.partnerId);
 }
@@ -1294,7 +1294,7 @@ function publishBlockers(p) {
   const files = publishFiles(p), partner = publishPartner(p);
   const missing = AwtBrand.missingKinds(partner, files.map(f => f.kind));
   if (missing.length) blockers.push(`gere antes: ${missing.map(kind => AwtBrand.KINDS[kind].label).join(', ')}`);
-  if (files.length && !S.githubToken) blockers.push('configure o token do GitHub na barra lateral');
+  if (hasGithubContent(p) && !S.githubToken) blockers.push('configure o token do GitHub na barra lateral');
   if (!partner.keptSiteUrl && !S.vercelToken) blockers.push('configure o token do Vercel na barra lateral');
   if (p.partnerId && !integrationReady()) blockers.push('configure a Integração AWT na barra lateral');
   return blockers;
@@ -2435,6 +2435,7 @@ async function loadQueue() {
         versaoAtual: ap.versaoAtual,
         arquivosObrigatorios: ap.arquivosObrigatorios, // o que o servidor exige do painel (o parceiro pode ter mantido o resto)
         materiais: ap.materiais || null,              // o que o parceiro já tem: { logo|site|cartao|timbrado: { acao, obs, url, arquivo } }
+        fotoTratamento: ap.fotoTratamento || null,    // ia | original (a foto em si vem em fotoUrl)
         ajusteComentario: ap.ajusteComentario || null,
         _fromApi: true,
       };
@@ -2499,6 +2500,39 @@ const publishPartner = p => ({
   keptSiteUrl: materialKept(p, 'site') ? partnerMaterial(p, 'site').url : undefined, // site mantido: é o site público, sem deploy
 });
 
+const ARCHIVE_DIR = 'originais-do-parceiro';
+
+async function fetchOriginal(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
+/**
+ * Tudo o que veio do parceiro, para a pasta do GitHub documentar cada cliente: os originais (logo, cartão, papel timbrado e foto) e um
+ * manifesto com o que ele declarou. O onboarding já tem esses arquivos; aqui só se registra. Sem `materiais` (servidor antigo) não há registro.
+ */
+function partnerArchive(p) {
+  if (!p.materiais) return {};
+  const archive = {};
+  for (const [material, m] of Object.entries(p.materiais)) {
+    if (m.acao !== 'criar' && m.arquivo && m.url) archive[`${ARCHIVE_DIR}/${material}`] = () => fetchOriginal(m.url);
+  }
+  if (p.fotoUrl) archive[`${ARCHIVE_DIR}/foto`] = () => fetchOriginal(p.fotoUrl);
+  const manifest = {
+    escritorio: p.nomeMarca, slug: p.slug,
+    materiais: Object.fromEntries(Object.entries(p.materiais).map(([material, m]) => [material, {
+      acao: m.acao, ...(m.arquivo && { arquivo: m.arquivo }), ...(material === 'site' && m.url && { url: m.url }), ...(m.obs && { pedido: m.obs }),
+    }])),
+    foto: { enviada: !!p.fotoUrl, tratamento: p.fotoTratamento },
+  };
+  archive['materiais-do-parceiro.json'] = async () => new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+  return archive;
+}
+
+/** A pasta do GitHub tem o que gravar: o que o marketing produziu e/ou o registro do parceiro. */
+const hasGithubContent = p => publishFiles(p).length > 0 || Object.keys(partnerArchive(p)).length > 0;
+
 /** Só parceira que veio da fila (tem partnerId) é entregue ao onboarding; parceira de teste publica sem entregar. */
 const publishClient = p => (p.partnerId ? brandClient() : undefined);
 
@@ -2519,7 +2553,8 @@ async function animatePublish(pid, checklist) {
       sources: Object.fromEntries(publishFiles(p).map(source => [source.kind, () => source.make(publishResult(p, source))])),
       checklist,
       client: publishClient(p),
-      github: publishFiles(p).length ? AwtPublish.createGithubPublisher({ token: S.githubToken }) : undefined, // sem arquivo, sem pasta
+      archive: partnerArchive(p),
+      github: hasGithubContent(p) ? AwtPublish.createGithubPublisher({ token: S.githubToken }) : undefined, // sem o que gravar, sem pasta
       vercel: publishPartner(p).keptSiteUrl ? undefined : AwtPublish.createVercelPublisher({ token: S.vercelToken }), // site mantido: sem deploy
       toPng: AwtBrandBrowser.imageBlobToPng,
       onProgress: ({ stage }) => {

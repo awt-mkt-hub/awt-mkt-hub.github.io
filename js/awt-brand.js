@@ -142,6 +142,13 @@
     return prepared;
   }
 
+  const EXTENSION_OF = { png: 'png', jpeg: 'jpg', webp: 'webp', gif: 'gif', pdf: 'pdf', html: 'html', svg: 'svg' };
+
+  /** A extensão certa de um arquivo, pelo conteúdo (o nome que vem de fora pode não ter extensão ou estar errado). */
+  async function extensionOf(blob) {
+    return EXTENSION_OF[detectKind(await readHead(blob))] || 'bin';
+  }
+
   // ── Regras da entrega ───────────────────────────────────────────────────────────────────────────────────────────
   function requiredKinds(servicos = []) {
     return Object.keys(KINDS).filter(k => KINDS[k].required === 'always' || servicos.includes(KINDS[k].required));
@@ -313,7 +320,7 @@
   return {
     API_BASE_URL, MAX_FILE_BYTES, KINDS, FORMAT_NAMES,
     BrandError, BrandConfigError, BrandFileError, BrandApiError,
-    detectKind, prepareForKind, requiredKinds, requiredFor, missingKinds, assertComplete, nextVersion, uuidV4,
+    detectKind, extensionOf, prepareForKind, requiredKinds, requiredFor, missingKinds, assertComplete, nextVersion, uuidV4,
     createClient, prepareFiles, sendFiles, deliver,
   };
 });

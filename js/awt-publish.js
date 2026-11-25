@@ -182,22 +182,40 @@
 
   // ── Publicar ────────────────────────────────────────────────────────────────────────────────────────────────────
   /**
-   * `sources`: { kind: () => Promise<Blob> } só do que o branding produziu (o que o parceiro manteve não entra). `client` (opcional):
+   * `sources`: { kind: () => Promise<Blob> } só do que o branding produziu (o que o parceiro manteve não entra). `archive`: o registro do
+   * que veio do parceiro ({ caminho: () => Promise<Blob> }: originais e manifesto), gravado na pasta do GitHub junto com o resto, para
+   * ficar documentado tudo de cada cliente (o onboarding já tem esses arquivos). `client` (opcional):
    * sem ele o escritório é publicado mas não entregue ao onboarding (parceira sem vínculo). `partner.keptSiteUrl`: o parceiro mantém o
    * site que já tem; ele é o site público, então não há deploy no Vercel. Sem arquivo nenhum (parceiro manteve tudo) também não há pasta
    * no GitHub, e a entrega ao onboarding segue com a lista vazia. `onProgress({ stage, kind?, phase? })`: prepare | github | vercel | onboarding.
    */
-  async function publishOffice({ partner, sources, checklist, notes, client, github, vercel, toPng, onProgress = () => {} }) {
+  /**
+   * Obtém os arquivos de registro da pasta ({ caminho: () => Promise<Blob> }). O caminho sem extensão ganha a certa, pelo conteúdo.
+   * Falha aqui interrompe tudo antes de publicar: pasta incompleta não serve como documentação.
+   */
+  async function collectArchive(archive) {
+    const collected = {};
+    for (const [path, produce] of Object.entries(archive)) {
+      let blob;
+      try { blob = await produce(); }
+      catch (cause) { throw new Brand.BrandFileError(`não foi possível obter ${path} (${cause.message})`, { cause }); }
+      collected[/\.[a-z0-9]+$/i.test(path) ? path : `${path}.${await Brand.extensionOf(blob)}`] = blob;
+    }
+    return collected;
+  }
+
+  async function publishOffice({ partner, sources, archive = {}, checklist, notes, client, github, vercel, toPng, onProgress = () => {} }) {
     Brand.assertComplete(partner, Object.keys(sources));
     const folder = folderName(partner.nomeMarca, partner.slug);
     const stage = name => step => onProgress({ stage: name, ...step });
 
     const files = await Brand.prepareFiles(sources, { toPng, onProgress: stage('prepare') });
+    const records = await collectArchive(archive);
 
     let git = null;
-    if (Object.keys(files).length) {
+    const repoFiles = { ...Object.fromEntries(Object.entries(files).map(([kind, blob]) => [REPO_FILES[kind], blob])), ...records };
+    if (Object.keys(repoFiles).length) {
       onProgress({ stage: 'github', folder });
-      const repoFiles = Object.fromEntries(Object.entries(files).map(([kind, blob]) => [REPO_FILES[kind], blob]));
       git = await github.publishFolder({
         folder, files: repoFiles, slug: partner.slug, message: `chore: publica ${folder} (v${Brand.nextVersion(partner)})`,
       });

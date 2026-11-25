@@ -19,7 +19,9 @@ Na última etapa do painel, **Publicar agora** faz tudo, nesta ordem, e para no 
    gera a versão branca).
 2. **Pasta no GitHub**, em `awt-mkt-hub/AWT-Onboarding`, com o **nome do escritório** (ex.: `Teste Wealth/`), num único commit:
    `index.html` (site), `logo.svg`, `logo.png`, `logo-branco.png`, `cartao-de-visita.pdf`, `papel-timbrado.pdf`, `foto.png` (quando
-   há foto) e `publicacao.json` (guarda o `slug` do escritório). Publicar de novo atualiza a mesma pasta; se já existir uma pasta com
+   há foto) e `publicacao.json` (guarda o `slug` do escritório). A pasta também **documenta o cliente**: `originais-do-parceiro/` (logo, cartão,
+   papel timbrado e foto que ele enviou, nos bytes originais) e `materiais-do-parceiro.json` (o que ele declarou: manter, ajustar ou criar, o
+   pedido de ajuste, o endereço do site e o tratamento da foto). Se algum original não puder ser baixado, nada é publicado. Publicar de novo atualiza a mesma pasta; se já existir uma pasta com
    esse nome de **outro** escritório, a publicação para em vez de sobrescrevê-la.
 3. **Deploy no Vercel** (`index.html` + `logo.svg`, projeto `<slug>`); espera o deploy ficar pronto e usa o endereço que o Vercel
    atribuiu.

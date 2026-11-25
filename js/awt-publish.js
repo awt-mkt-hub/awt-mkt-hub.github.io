@@ -18,6 +18,7 @@
   const VERCEL_API = 'https://api.vercel.com';
   const MARKER_FILE = 'publicacao.json'; // diz de qual escritório é a pasta, para dois nomes iguais não se sobrescreverem
   const MAX_FOLDER_LENGTH = 100;
+  const MAX_GITHUB_URL_LENGTH = 300; // site.githubUrl no servidor
 
   // Nome de cada arquivo dentro da pasta do escritório. O site fica em index.html (mesma convenção das pastas já existentes).
   const REPO_FILES = Object.freeze({
@@ -39,9 +40,12 @@
   }
 
   // ── Nomes ───────────────────────────────────────────────────────────────────────────────────────────────────────
-  /** Nome da pasta no GitHub: o nome do escritório como o time escreveu ("Teste Wealth"), sem o que quebra caminho ou URL. */
+  /**
+   * Nome da pasta no GitHub: o nome do escritório como o time escreveu ("Teste Wealth"), sem o que quebra caminho ou URL. O link da
+   * pasta vai no evento de entrega, e o servidor limita esse link a 300 caracteres (acento vira 6 na URL): nome comprido é cortado até caber.
+   */
   function folderName(nomeMarca, slug) {
-    const name = String(nomeMarca || '')
+    let name = String(nomeMarca || '')
       // eslint-disable-next-line no-control-regex
       .replace(/[\\/:*?"<>|#%\u0000-\u001f]/g, ' ')
       .replace(/\s+/g, ' ')
@@ -49,6 +53,7 @@
       .replace(/^\.+|\.+$/g, '')
       .slice(0, MAX_FOLDER_LENGTH)
       .trim();
+    while (name && githubFolderUrl(name).length > MAX_GITHUB_URL_LENGTH) name = name.slice(0, -1).trim();
     return name || slug;
   }
 

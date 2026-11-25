@@ -311,6 +311,7 @@ const S = {
   pid: null,
   si: 0,
   status:      lsGet('awt_status', {}),
+  chk: {}, // session-only: { pid: { ec1: true, ... } } — o checklist da entrega marcado pelo operador
   redo: {}, // session-only: { `${pid}_${etapa}`: true } — refazer mesmo o que o parceiro pediu para manter
   pub: {}, // session-only: { pid: { state: 'running'|'done'|'error', row, error, result } } — uma publicação por parceira
   ajustesNote: lsGet('awt_ajustes', {}),
@@ -1191,7 +1192,7 @@ function rGen(p, step, si, type) {
           <img src="${realResult}" style="max-width:100%;max-height:320px;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.12)" alt="Foto corporativa">
           <div style="font-size:11px;color:#999;margin-top:8px">${p.nomeBanker.split(' ')[0]}-FotoCorp.png</div>
           <div style="margin-top:8px">
-            <a href="${realResult}" download="${p.nomeBanker.split(' ')[0]}-FotoCorp.png" style="font-size:12px;color:var(--roxo);text-decoration:none">⬇ Baixar foto</a>
+            <a href="${realResult}" download="${esc(p.nomeBanker.split(' ')[0])}-FotoCorp.png" style="font-size:12px;color:var(--roxo);text-decoration:none">⬇ Baixar foto</a>
           </div>
         </div>`;
       } else {
@@ -1366,12 +1367,12 @@ function rPublicar(p, step, si, steps) {
     </div>
     <div class="card">
       <div class="card-title">Checklist de entrega</div>
-      <div class="chk-item"><input type="checkbox" id="ec1"><label for="ec1">Nome da marca correto em todos os materiais</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec2"><label for="ec2">Cor primária correta — #${esc(p.corHex)}</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec3"><label for="ec3">Botão WhatsApp com número correto — ${esc(p.celular)}</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec4"><label for="ec4">Disclaimer AWT presente no site</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec5"><label for="ec5">Sem palavras proibidas</label></div>
-      <div class="chk-item"><input type="checkbox" id="ec6"><label for="ec6">Especialidades conferidas: ${esc((p.especialidades || []).join(', '))}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec1"${chkAttr(p, 'ec1')}><label for="ec1">Nome da marca correto em todos os materiais</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec2"${chkAttr(p, 'ec2')}><label for="ec2">Cor primária correta — #${esc(p.corHex)}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec3"${chkAttr(p, 'ec3')}><label for="ec3">Botão WhatsApp com número correto — ${esc(p.celular)}</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec4"${chkAttr(p, 'ec4')}><label for="ec4">Disclaimer AWT presente no site</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec5"${chkAttr(p, 'ec5')}><label for="ec5">Sem palavras proibidas</label></div>
+      <div class="chk-item"><input type="checkbox" id="ec6"${chkAttr(p, 'ec6')}><label for="ec6">Especialidades conferidas: ${esc((p.especialidades || []).join(', '))}</label></div>
     </div>
     <div class="card">${rows}</div>
     ${blockers.length ? `<div class="box-warn" style="margin-bottom:14px">⚠️ Para publicar: ${esc(blockers.join('; '))}.</div>` : ''}
@@ -2492,6 +2493,11 @@ const PUBLISH_CHECKLIST = { nome_marca: 'ec1', cor_primaria: 'ec2', whatsapp: 'e
 
 const publishResult = (p, source) => S.results[`${p.id}_${source.result}`];
 const publishFiles = p => PUBLISH_SOURCES.filter(source => publishResult(p, source) && !kindKept(p, source.kind)); // o que o parceiro manteve não se publica
+/** O checklist sobrevive ao redesenho da tela (a fila atualiza sozinha a cada 2 min): o que o operador marcou fica no estado. */
+const chkAttr = (p, id) => (S.chk[p.id] && S.chk[p.id][id] ? ' checked' : '');
+document.addEventListener('change', e => {
+  if (/^ec[1-6]$/.test(e.target.id) && S.pid != null) (S.chk[S.pid] = S.chk[S.pid] || {})[e.target.id] = e.target.checked;
+});
 const publishChecklist = () => Object.fromEntries(
   Object.entries(PUBLISH_CHECKLIST).map(([name, id]) => [name, !!document.getElementById(id)?.checked]));
 const publishPartner = p => ({
@@ -2504,6 +2510,7 @@ const ARCHIVE_DIR = 'originais-do-parceiro';
 
 async function fetchOriginal(url) {
   const res = await fetch(url);
+  if (res.status === 401 || res.status === 403) throw new Error('o link do arquivo expirou: clique em "Atualizar fila" e publique de novo');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.blob();
 }

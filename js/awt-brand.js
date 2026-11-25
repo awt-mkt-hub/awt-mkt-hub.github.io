@@ -189,6 +189,18 @@
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
   }
 
+  /**
+   * Texto que vem do parceiro nunca abre tag no painel (que guarda tokens no navegador): troca "<" por "＜", visualmente igual e inerte.
+   * Vale para qualquer profundidade; números, booleanos e null passam como estão. O servidor já recusa HTML nas respostas novas;
+   * isto cobre o que já estava gravado e é a última barreira.
+   */
+  function neutralize(value) {
+    if (typeof value === 'string') return value.replace(/</g, '＜');
+    if (Array.isArray(value)) return value.map(neutralize);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, neutralize(item)]));
+    return value;
+  }
+
   const truncate = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
   /**
@@ -214,9 +226,10 @@
       return res.json();
     }
 
+    /** O que o parceiro escreveu vira texto na tela do time: passa por `neutralize` aqui, uma vez, para nenhuma tela receber HTML dele. */
     async function queue() {
       const data = await call('GET', '/internal/brand/queue');
-      return Array.isArray(data.partners) ? data.partners : [];
+      return Array.isArray(data.partners) ? data.partners.map(neutralize) : [];
     }
 
     /** Entregas dos últimos `dias` (o servidor limita a 90). */
@@ -320,7 +333,7 @@
   return {
     API_BASE_URL, MAX_FILE_BYTES, KINDS, FORMAT_NAMES,
     BrandError, BrandConfigError, BrandFileError, BrandApiError,
-    detectKind, extensionOf, prepareForKind, requiredKinds, requiredFor, missingKinds, assertComplete, nextVersion, uuidV4,
+    detectKind, extensionOf, neutralize, prepareForKind, requiredKinds, requiredFor, missingKinds, assertComplete, nextVersion, uuidV4,
     createClient, prepareFiles, sendFiles, deliver,
   };
 });

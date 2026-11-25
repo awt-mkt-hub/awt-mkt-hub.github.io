@@ -725,11 +725,23 @@ async function loadAll() {
   loadDeliveries();
 }
 
+/**
+ * Quem está na fila ainda não foi entregue, é o servidor que diz. O estado salvo neste navegador pode ter ficado para trás (a Fran
+ * devolveu a entrega para ajuste, ou o operador registrou uma falha) e travaria o botão Entregar para sempre.
+ */
+function syncLocalState(item) {
+  const slug = item.slug || item.partnerId || item.id;
+  const { status } = getPartnerState(slug);
+  if (status === 'delivered') savePartnerState(slug, { status: 'started', files: {} }); // os arquivos da entrega anterior já foram usados
+  else if (status === 'failed') savePartnerState(slug, { status: 'started' });
+}
+
 async function loadQueue() {
   const el = document.getElementById('queueList');
   el.innerHTML = '<div class="empty"><div class="spin"></div></div>';
   try {
     const items = await currentClient().queue();
+    items.forEach(syncLocalState);
     queueData = items;
     document.getElementById('queueBadge').textContent = items.length;
     if (!items.length) {

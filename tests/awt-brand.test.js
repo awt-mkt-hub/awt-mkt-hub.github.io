@@ -401,3 +401,18 @@ test('parceiro manteve tudo: a entrega vai sem arquivos e sem pedir nenhuma URL 
   assert.deepEqual(JSON.parse(fetchImpl.calls[0].body).files, []);
   assert.deepEqual(result.files, []);
 });
+
+// ── Texto do parceiro nunca vira HTML no painel ─────────────────────────────────────────────────────────────────────────
+test('neutralize troca "<" em qualquer profundidade e deixa o resto como está', () => {
+  const input = { nome: '<img src=x onerror=alert(1)>', lista: ['ok', '<b>x</b>'], aninhado: { visao: 'a < b' }, n: 3, ok: true, nada: null };
+  assert.deepEqual(B.neutralize(input), { nome: '＜img src=x onerror=alert(1)>', lista: ['ok', '＜b>x＜/b>'], aninhado: { visao: 'a ＜ b' }, n: 3, ok: true, nada: null });
+  assert.equal(B.neutralize('Torres & Filhos > 5'), 'Torres & Filhos > 5', 'só "<" abre tag');
+});
+
+test('a fila já chega neutralizada: nenhuma tela recebe HTML do parceiro', async () => {
+  const evil = { partnerId: 'p-1', nomeMarca: '<img src=x onerror=alert(1)>', especialidades: ['<script>x</script>'], materiais: { site: { obs: '<a href=x>' } } };
+  const fetchImpl = fakeFetch(() => reply(200, { partners: [evil] }));
+  const [partnerInQueue] = await makeClient(fetchImpl).queue();
+  assert.ok(!JSON.stringify(partnerInQueue).includes('<'));
+  assert.equal(partnerInQueue.partnerId, 'p-1');
+});

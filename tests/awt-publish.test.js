@@ -429,3 +429,17 @@ test('extensionOf escolhe a extensão pelo conteúdo, não pelo nome', async () 
   assert.equal(await B.extensionOf(blob('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), 'svg');
   assert.equal(await B.extensionOf(blob([1, 2, 3])), 'bin');
 });
+
+test('nome de escritório comprido e acentuado é cortado até o link da pasta caber nos 300 caracteres do servidor', () => {
+  const long = 'Gestão Patrimonial de Investimentos e Seguros Ltda '.repeat(3);
+  const name = P.folderName(long, 'x');
+  assert.ok(P.githubFolderUrl(name).length <= 300, `${P.githubFolderUrl(name).length} caracteres`);
+  assert.ok(name.startsWith('Gestão Patrimonial'));
+  assert.equal(name, name.trim());
+  const worst = P.folderName('ã'.repeat(100), 'x');
+  assert.ok(P.githubFolderUrl(worst).length <= 300 && worst.length > 20);
+});
+
+test('nome curto não é alterado pelo limite do link', () => {
+  assert.equal(P.folderName('Souza Wealth Gestão', 'x'), 'Souza Wealth Gestão');
+});

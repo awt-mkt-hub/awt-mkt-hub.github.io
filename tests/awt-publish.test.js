@@ -63,10 +63,11 @@ function fakeGithub({ existingMarker, failOn } = {}) {
 
 const githubFor = repo => P.createGithubPublisher({ token: 'ghp_teste', fetchImpl: repo.fetchImpl });
 
-function fakeVercel({ states = ['READY'], alias = ['torres-wealth.vercel.app'], createError } = {}) {
+function fakeVercel({ states = ['READY'], alias = ['torres-wealth.vercel.app'], createError, protectionError } = {}) {
   let polls = 0;
   const fetchImpl = fakeFetch(call => {
-    if (call.method === 'POST') return createError ? reply(createError.status, { error: { message: createError.message } }) : reply(200, { id: 'dpl_1', readyState: 'QUEUED' });
+    if (call.method === 'POST') return createError ? reply(createError.status, { error: { message: createError.message } }) : reply(200, { id: 'dpl_1', projectId: 'prj_1', readyState: 'QUEUED' });
+    if (call.method === 'PATCH') return protectionError ? reply(protectionError.status, { error: { message: protectionError.message } }) : reply(200, {});
     polls += 1;
     return reply(200, { id: 'dpl_1', readyState: states[Math.min(polls - 1, states.length - 1)], alias });
   });
@@ -185,6 +186,19 @@ test('Vercel: cria o deploy de produção com os arquivos em base64 e devolve a 
     { file: 'logo.svg', data: b64('<svg/>'), encoding: 'base64' },
   ]);
   assert.deepEqual(result, { url: 'https://torres-wealth.vercel.app', deploymentId: 'dpl_1' });
+});
+
+test('Vercel: o site do parceiro é público (tira o login obrigatório do projeto a cada deploy)', async () => {
+  const { fetchImpl, publisher } = fakeVercel();
+  await publisher.deploy({ name: 'torres-wealth', files: { 'index.html': blob('x') } });
+  const patch = fetchImpl.calls.find(c => c.method === 'PATCH');
+  assert.equal(patch.url, 'https://api.vercel.com/v9/projects/prj_1');
+  assert.deepEqual(patch.body, { ssoProtection: null });
+});
+
+test('Vercel: se não der para abrir o acesso, a publicação falha (não entrega ao onboarding um site que pede login)', async () => {
+  const { publisher } = fakeVercel({ protectionError: { status: 403, message: 'Forbidden' } });
+  await assert.rejects(publisher.deploy({ name: 'x', files: { 'index.html': blob('x') } }), e => e.step === 'vercel' && e.status === 403);
 });
 
 test('Vercel: espera o deploy ficar READY em vez de dormir um tempo fixo', async () => {

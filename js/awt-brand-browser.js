@@ -117,8 +117,8 @@
 
   const RASTER_MIME = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
 
-  /** Embrulha um PNG/JPG/WebP/GIF num SVG (o painel trabalha a logo como SVG). Devolve null se o arquivo não é uma imagem raster. */
-  async function rasterBlobToSvg(blob, { width = 400, height = 200 } = {}) {
+  /** Lê um PNG/JPG/WebP/GIF como data URL com o tipo REAL (o que o storage devolve no Content-Type não vale). Devolve null se não é imagem raster. */
+  async function rasterBlobToDataUrl(blob) {
     const format = root.AwtBrand.detectKind(new Uint8Array(await blob.slice(0, 16).arrayBuffer()));
     const mime = RASTER_MIME[format];
     if (!mime) return null;
@@ -128,8 +128,15 @@
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(new Blob([blob], { type: mime }));
     });
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"><image href="${dataUrl}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet"/></svg>`;
+    return { dataUrl, mime };
   }
 
-  root.AwtBrandBrowser = { imageBlobToPng, svgToPngBlob, htmlToPdfBlob, dataUrlToBlob, rasterBlobToSvg };
+  /** Embrulha um PNG/JPG/WebP/GIF num SVG (o painel trabalha a logo como SVG). Devolve null se o arquivo não é uma imagem raster. */
+  async function rasterBlobToSvg(blob, { width = 400, height = 200 } = {}) {
+    const raster = await rasterBlobToDataUrl(blob);
+    if (!raster) return null;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"><image href="${raster.dataUrl}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet"/></svg>`;
+  }
+
+  root.AwtBrandBrowser = { imageBlobToPng, svgToPngBlob, htmlToPdfBlob, dataUrlToBlob, rasterBlobToDataUrl, rasterBlobToSvg };
 })(window);

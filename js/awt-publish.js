@@ -164,11 +164,13 @@
       return res.json();
     }
 
-    /** Publica `files` ({ caminho: Blob }) em produção e espera o deploy ficar pronto. Devolve a URL pública. */
+    /** Publica `files` ({ caminho: Blob }) em produção, abre o acesso público e espera o deploy ficar pronto. Devolve a URL pública. */
     async function deploy({ name, files }) {
       const payload = [];
       for (const [file, blob] of Object.entries(files)) payload.push({ file, data: await toBase64(blob), encoding: 'base64' });
       const created = await call('POST', '/v13/deployments', { name, target: 'production', files: payload, projectSettings: { framework: null } });
+      // O projeto nasce com o "Deployment Protection" do Vercel (login obrigatório): o site do parceiro é público, então a proteção sai a cada deploy
+      await call('PATCH', `/v9/projects/${encodeURIComponent(created.projectId || name)}`, { ssoProtection: null });
 
       let deployment = created;
       for (let waited = 0; deployment.readyState !== 'READY'; waited += pollMs) {

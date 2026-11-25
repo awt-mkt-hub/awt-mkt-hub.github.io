@@ -2454,18 +2454,17 @@ async function loadQueue() {
           lsSet('awt_results', S.results);
         }).catch(()=>{});
       }
-      // Pré-carrega fotoUrl em fotoCorpInput (expira em 1h, baixar logo)
+      // Pré-carrega a foto do parceiro (o link expira em 1h)
       if (mapped.fotoUrl) {
-        fetch(mapped.fotoUrl).then(r => r.blob()).then(blob => {
-          return new Promise(res => {
-            const reader = new FileReader();
-            reader.onload = e => res(e.target.result);
-            reader.readAsDataURL(blob);
-          });
-        }).then(dataUrl => {
+        fetch(mapped.fotoUrl).then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.blob();
+        }).then(AwtBrandBrowser.rasterBlobToDataUrl).then(raster => {
+          if (!raster) throw new Error('arquivo da foto não é PNG/JPG');
           S.fotoCorpInput = S.fotoCorpInput || {};
-          S.fotoCorpInput[pId] = { dataUrl, mime: blob.type, name: 'foto-banker' }; // o tipo real: o parceiro pode ter enviado JPEG
-        }).catch(()=>{});
+          S.fotoCorpInput[pId] = { dataUrl: raster.dataUrl, mime: raster.mime, name: 'foto-banker' };
+          render();
+        }).catch(e => console.warn('Foto do parceiro não carregou:', e));
       }
       const idx = PARTNERS.findIndex(x => x.partnerId === mapped.partnerId || x.slug === mapped.slug);
       if (idx >= 0) { mapped.id = PARTNERS[idx].id; PARTNERS[idx] = mapped; }

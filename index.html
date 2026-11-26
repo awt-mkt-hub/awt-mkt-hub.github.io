@@ -379,7 +379,11 @@ function getSteps(p) {
   });
 }
 
+/** A fila do servidor manda: parceira com ajuste pedido está em andamento mesmo com todas as etapas marcadas (o estado local é de antes do pedido). */
+const adjustmentRequested = p => p.status === 'ajuste_pedido';
+
 function partnerStatus(p) {
+  if (adjustmentRequested(p)) return 'prog';
   const steps = getSteps(p);
   const done = steps.filter(s => gst(p.id, s.id) === 'done').length;
   if (done === 0) return 'pend';
@@ -724,10 +728,10 @@ function rQueue() {
     const stLabel = { pend: 'Pendente', prog: 'Em andamento', ok: 'Concluído' }[st];
     const stChip  = { pend: 'chip-pend', prog: 'chip-prog',   ok: 'chip-ok'   }[st];
     const ativosChips = (p.ativos || []).map(a => `<span class="chip chip-ativo">${a}</span>`).join('');
-    const ajusteBadge = p.status === 'ajuste_pedido'
+    const ajusteBadge = adjustmentRequested(p)
       ? `<div style="display:flex;align-items:center;gap:5px;margin-top:6px"><span style="background:#FEF3C7;color:#92400E;font-size:10px;padding:2px 7px;border-radius:12px;font-weight:600">⚠ Ajuste pedido</span>${p.ajusteComentario ? `<span style="font-size:11px;color:#92400E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${p.ajusteComentario}</span>` : ''}</div>`
       : '';
-    return `<div class="pc" style="position:relative${p.status === 'ajuste_pedido' ? ';border-color:#FCD34D' : ''}">
+    return `<div class="pc" style="position:relative${adjustmentRequested(p) ? ';border-color:#FCD34D' : ''}">
       <div data-a="sel" data-id="${p.id}" style="display:flex;align-items:center;gap:14px;flex:1;cursor:pointer">
         <div class="pc-av" style="background:#${p.corHex}">${initials(p.nomeMarca)}</div>
         <div class="pc-info">
@@ -795,6 +799,16 @@ function rQueue() {
 }
 
 // ── WORKFLOW ──
+/** O que a Fran pediu para ajustar, na tela inteira da parceira (antes só aparecia na etapa Publicar e cortado na fila). */
+function rAjusteBanner(p) {
+  if (!adjustmentRequested(p)) return '';
+  return `<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:14px 18px;margin:0 0 18px;color:#92400E">
+    <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔄 Ajuste pedido pela revisão</div>
+    <div style="font-size:13px;line-height:1.5;white-space:pre-wrap">${esc(p.ajusteComentario || 'Sem detalhes: veja com quem pediu.')}</div>
+    <div style="font-size:11px;margin-top:6px;opacity:.8">Refaça o que for preciso nas etapas e publique de novo: a entrega vai como nova versão.</div>
+  </div>`;
+}
+
 function rWorkflow() {
   const p = gp(S.pid);
   if (!p) return rQueue();
@@ -838,7 +852,7 @@ function rWorkflow() {
       <div class="sb-steps">${sbSteps}</div>
       ${rApiCfg()}
     </div>
-    <div class="main">${rStep(p, cur, S.si, steps)}</div>
+    <div class="main">${rAjusteBanner(p)}${rStep(p, cur, S.si, steps)}</div>
   </div>`;
 }
 
@@ -1086,7 +1100,7 @@ function rGen(p, step, si, type) {
         `<div id="pm-${type}-${i}" class="pmsg">${m}</div>`).join('');
       body = `<div style="padding:8px 4px">
         <div class="prog-wrap">
-          <div class="prog-head"><span>Gerando via Claude Code…</span><span id="pct-${type}">0%</span></div>
+          <div class="prog-head"><span>${type === 'fotoCorp' ? 'Gerando a foto com o GPT…' : 'Gerando via Claude Code…'}</span><span id="pct-${type}">0%</span></div>
           <div class="prog-bar"><div class="prog-fill" id="pfill-${type}" style="width:0%"></div></div>
         </div>
         <div class="prog-msgs">${msgs}</div>
@@ -1212,7 +1226,7 @@ function rGen(p, step, si, type) {
     const mockBanner = (!realResult && !errorMsg && type !== 'fotoCorp' && !S.apiKey) ? `<div style="background:#FEF9C3;border:1px solid #FDE68A;border-radius:8px;padding:9px 14px;font-size:12px;color:#92400E;margin-bottom:12px">⚠️ <strong>Modo simulação</strong> — configure a API key no canto inferior esquerdo para gerar com o Claude de verdade.</div>` : '';
     body = `<div>
       <div style="display:flex;align-items:center;gap:7px;color:#1E8449;font-weight:600;font-size:13px;margin-bottom:14px">
-        <span style="font-size:16px">✓</span> ${realResult ? 'Gerado pelo Claude ✦' : errorMsg ? 'Erro — preview simulado' : !S.apiKey ? 'Simulação (sem API key)' : 'Gerado com sucesso'}
+        <span style="font-size:16px">✓</span> ${realResult ? (type === 'fotoCorp' ? 'Gerado pelo GPT ✦' : 'Gerado pelo Claude ✦') : errorMsg ? 'Erro — preview simulado' : !S.apiKey ? 'Simulação (sem API key)' : 'Gerado com sucesso'}
         ${realResult ? `<span style="margin-left:auto;font-size:10px;padding:2px 7px;background:#D1FAE5;color:#065F46;border-radius:20px;font-weight:600">REAL ✦</span>` : (!S.apiKey && type !== 'fotoCorp') ? `<span style="margin-left:auto;font-size:10px;padding:2px 7px;background:#FEF3C7;color:#92400E;border-radius:20px;font-weight:600">MOCK</span>` : ''}
       </div>
       ${errBanner}
@@ -1356,7 +1370,7 @@ function rPublicar(p, step, si, steps) {
 
   const files = publishFiles(p);
   const blockers = publishBlockers(p);
-  const isAjuste = p.status === 'ajuste_pedido';
+  const isAjuste = adjustmentRequested(p);
   const version = AwtBrand.nextVersion(p);
   const fileList = files.map(f => `<div class="ent-file"><span>${f.icon}</span>${AwtBrand.KINDS[f.kind].label}</div>`).join('');
   return `<div class="sc">

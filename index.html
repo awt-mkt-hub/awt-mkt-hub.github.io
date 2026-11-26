@@ -311,6 +311,7 @@ const S = {
   pid: null,
   si: 0,
   status:      lsGet('awt_status', {}),
+  fotoSrc: lsGet('awt_foto_src', {}), // { pid: impressão da foto original que gerou o resultado }
   chk: {}, // session-only: { pid: { ec1: true, ... } } — o checklist da entrega marcado pelo operador
   redo: {}, // session-only: { `${pid}_${etapa}`: true } — refazer mesmo o que o parceiro pediu para manter
   pub: {}, // session-only: { pid: { state: 'running'|'done'|'error', row, error, result } } — uma publicação por parceira
@@ -363,6 +364,8 @@ function resetPartner(pid) {
     Object.keys(S[key]).forEach(k => { if (k.startsWith(prefix)) delete S[key][k]; });
   });
   delete S.pub[pid];
+  delete S.fotoSrc[pid];
+  lsSet('awt_foto_src', S.fotoSrc);
   saveState();
   render();
 }
@@ -626,7 +629,7 @@ function rApiCfg() {
         <button class="btn btn-s" data-a="close-openaicfg" style="font-size:11px;padding:5px 10px">✕</button>
       </div>
       <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:6px;line-height:1.5">
-        Chave OpenAI com acesso ao gpt-image-1. Usada para gerar fotos corporativas automaticamente.
+        Chave OpenAI com acesso ao gpt-image-2.6-sunburst. Usada para gerar fotos corporativas automaticamente.
       </div>
     </div>` : ''}
     <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">
@@ -2027,6 +2030,30 @@ Retorne APENAS o HTML completo com doctype, sem markdown, sem explicações.${lo
 // ── FOTO CORPORATIVA ──
 const FOTO_CORP_PROMPT = `Transforme esta foto em um retrato corporativo executivo de alta qualidade. Mantenha fielmente os traços faciais, expressão natural e identidade da pessoa. Substitua a roupa por um terno executivo moderno na cor azul-marinho ou grafite, camisa branca e sem gravata. Utilize iluminação profissional de estúdio suave, simulando luz natural proveniente das janelas do ambiente, mantendo a mesma direção, intensidade e temperatura de cor da iluminação do fundo. Adicione um fundo corporativo elegante e desfocado em tons neutros (escritório moderno), preservando uma integração natural entre sujeito e ambiente. Ajuste postura, enquadramento e composição para padrão LinkedIn e perfil executivo. Realce a nitidez apenas no rosto e nos olhos, mantendo textura de pele natural, sem excesso de definição. Evite aparência de renderização ou HDR exagerado. Aplique leve granulação fotográfica e contraste moderado para que o sujeito tenha o mesmo nível de detalhe do fundo. Reduza ligeiramente a nitidez do terno e das bordas para evitar efeito de recorte. Aparência confiante, sofisticada e acessível. Fotografia corporativa premium, estilo CEO, wealth management, banco de investimentos e consultoria estratégica. Lente 85 mm, profundidade de campo reduzida, fotografia editorial realista, com integração perfeita entre pessoa e fundo, como uma fotografia capturada diretamente em ambiente corporativo.`;
 
+/** O resultado da foto só vale para a foto original de que saiu: o mesmo escritório (mesmo slug) refeito num teste novo traz outra foto. */
+const fotoFingerprint = dataUrl => { let h = 0; for (let i = 0; i < dataUrl.length; i += 97) h = (Math.imul(h, 31) + dataUrl.charCodeAt(i)) | 0; return `${dataUrl.length}:${h}`; };
+function markFotoSource(pid) {
+  const input = S.fotoCorpInput && S.fotoCorpInput[pid];
+  if (!input) return;
+  S.fotoSrc[pid] = fotoFingerprint(input.dataUrl);
+  lsSet('awt_foto_src', S.fotoSrc);
+}
+/** Chegou a foto do parceiro: um resultado que se sabe ter saído de OUTRA foto (o mesmo slug refeito num teste novo) sai da tela, senão a aprovação publicaria a foto errada. */
+function dropStaleFotoResult(pid, dataUrl) {
+  const rKey = pid + '_fotoCorp';
+  if (S.results[rKey] === undefined || S.fotoSrc[pid] === undefined || S.fotoSrc[pid] === fotoFingerprint(dataUrl)) return false; // sem origem registrada (upload manual antigo): não se mexe
+  delete S.results[rKey];
+  delete S.results[rKey + '_error'];
+  delete S.fotoSrc[pid];
+  lsSet('awt_foto_src', S.fotoSrc);
+  sst(pid, 'fotoCorp', 'pending');
+  lsSet('awt_results', S.results);
+  return true;
+}
+
+/** Modelo da edição da foto (/v1/images/edits). O sunburst é o de qualidade; o flare é o rápido. Trocar aqui, é o único lugar. */
+const FOTO_CORP_MODEL = 'gpt-image-2.6-sunburst';
+
 function handleFotoCorpInput(input, pid) {
   const file = input.files[0];
   if (!file) return;
@@ -2047,6 +2074,7 @@ function handleFotoCorpUpload(input, pid, sid) {
     const rKey = pid + '_' + sid;
     S.results[rKey] = e.target.result;
     lsSet('awt_results', S.results);
+    markFotoSource(pid);
     sst(pid, sid, 'done');
     render();
   };
@@ -2064,44 +2092,32 @@ async function animateFotoCorp(pid, sid) {
     render();
     return;
   }
+  // Começa do zero: se esta geração falhar, a foto de uma tentativa (ou teste) anterior não pode ficar na tela pronta para aprovar
+  delete S.results[rKey];
+  delete S.results[rKey + '_error'];
+  lsSet('awt_results', S.results);
   try {
-    let b64 = null;
-
-    // Tenta gpt-image-1 (edits) — requer tier especial na OpenAI
-    try {
-      const res = await fetch(fotoData.dataUrl);
-      const blob = await res.blob();
-      const mime = fotoData.mime || blob.type;
-      const file = new File([blob], `foto.${{ 'image/png': 'png', 'image/webp': 'webp' }[mime] || 'jpg'}`, { type: mime });
-      const form = new FormData();
-      form.append('model', 'gpt-image-1');
-      form.append('image', file);
-      form.append('prompt', FOTO_CORP_PROMPT);
-      form.append('n', '1');
-      form.append('size', '1024x1024');
-      const apiRes = await fetch('https://api.openai.com/v1/images/edits', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${S.openaiKey}` },
-        body: form
-      });
-      const data = await apiRes.json();
-      if (!apiRes.ok) throw new Error(data.error?.message || '');
-      b64 = data.data[0].b64_json;
-    } catch(e1) {
-      // Fallback: dall-e-3 generations (sem edição, mas funciona sem tier especial)
-      const genRes = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${S.openaiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'dall-e-3', prompt: FOTO_CORP_PROMPT, n: 1, size: '1024x1024', response_format: 'b64_json' })
-      });
-      const genData = await genRes.json();
-      if (!genRes.ok) throw new Error(genData.error?.message || JSON.stringify(genData));
-      b64 = genData.data[0].b64_json;
-    }
-
-    S.results[rKey] = `data:image/png;base64,${b64}`;
+    const res = await fetch(fotoData.dataUrl);
+    const blob = await res.blob();
+    const mime = fotoData.mime || blob.type;
+    const file = new File([blob], `foto.${{ 'image/png': 'png', 'image/webp': 'webp' }[mime] || 'jpg'}`, { type: mime });
+    const form = new FormData();
+    form.append('model', FOTO_CORP_MODEL);
+    form.append('image', file);
+    form.append('prompt', FOTO_CORP_PROMPT);
+    form.append('n', '1');
+    form.append('size', '1024x1024');
+    const apiRes = await fetch('https://api.openai.com/v1/images/edits', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${S.openaiKey}` },
+      body: form
+    });
+    const data = await apiRes.json();
+    // Sem plano B por texto: gerar "um executivo" a partir do prompt inventa OUTRA pessoa. Se a edição da foto falha, o erro aparece.
+    if (!apiRes.ok) throw new Error(`${FOTO_CORP_MODEL}: ${data.error?.message || `HTTP ${apiRes.status}`}`);
+    S.results[rKey] = `data:image/png;base64,${data.data[0].b64_json}`;
     lsSet('awt_results', S.results);
-    delete S.results[rKey + '_error'];
+    markFotoSource(pid);
   } catch(e) {
     S.results[rKey + '_error'] = e.message;
   }
@@ -2441,7 +2457,8 @@ async function loadQueue() {
         _fromApi: true,
       };
       // Pré-carrega logo se vier da API
-      if (mapped.logoUrl && !S.results[pId + '_logo']) {
+      // A logo do parceiro entra pronta (aprovada) só quando ele a mantém; se pediu ajuste, o operador refaz a partir do original
+      if (mapped.logoUrl && !S.results[pId + '_logo'] && mapped.materiais?.logo?.acao !== 'ajustar') {
         fetch(mapped.logoUrl).then(r => r.blob()).then(async blob => {
           const text = await blob.text();
           // SVG entra como veio; PNG/JPG do parceiro entra embrulhado num SVG, como no envio manual de logo (antes era ignorado)
@@ -2463,6 +2480,7 @@ async function loadQueue() {
           if (!raster) throw new Error('arquivo da foto não é PNG/JPG');
           S.fotoCorpInput = S.fotoCorpInput || {};
           S.fotoCorpInput[pId] = { dataUrl: raster.dataUrl, mime: raster.mime, name: 'foto-banker' };
+          dropStaleFotoResult(pId, raster.dataUrl);
           render();
         }).catch(e => console.warn('Foto do parceiro não carregou:', e));
       }

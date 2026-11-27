@@ -457,3 +457,55 @@ test('nome de escritório comprido e acentuado é cortado até o link da pasta c
 test('nome curto não é alterado pelo limite do link', () => {
   assert.equal(P.folderName('Souza Wealth Gestão', 'x'), 'Souza Wealth Gestão');
 });
+
+// ── Ajuste pedido item a item: só o que foi refeito, sem quebrar o site no ar ──────────────────────────────────────────
+const only = (...kinds) => Object.fromEntries(kinds.map(kind => [kind, sources()[kind]]));
+const adjustment = (items, kinds) => partner({ versaoAtual: 1, ajusteItens: items, arquivosObrigatorios: kinds });
+
+test('Ajuste só do cartão: GitHub e onboarding recebem só o cartão, sem deploy e sem site no evento', async () => {
+  const ctx = await publish({ partner: adjustment({ cartao: 'Telefone errado' }, ['cartao_pdf']), sources: only('cartao_pdf') });
+  await ctx.run();
+  assert.deepEqual(ctx.order, ['github', 'onboarding'], 'o site não mudou: nada de Vercel');
+  assert.ok(ctx.repo.paths().includes('Teste Wealth/cartao-de-visita.pdf'));
+  const event = ctx.onboarding.fetchImpl.calls.find(c => c.url.endsWith('/events')).body;
+  assert.deepEqual(event.files.map(f => f.kind), ['cartao_pdf']);
+  assert.equal(event.version, 2);
+  assert.equal('site' in event, false, 'o servidor segue com o site da versão anterior');
+});
+
+test('Ajuste da logo: o site é republicado COM o código que já existe, e só a logo vai ao servidor', async () => {
+  const ctx = await publish({
+    partner: adjustment({ logo: 'Mais sóbria' }, ['logo_png', 'logo_branco_png']),
+    sources: only('logo_svg', 'logo_png', 'logo_branco_png'), unchanged: only('site_html'),
+  });
+  await ctx.run();
+  assert.deepEqual(ctx.order, ['github', 'vercel', 'onboarding']);
+  assert.deepEqual(ctx.vercel.fetchImpl.calls[0].body.files.map(f => f.file), ['index.html', 'logo.svg'], 'o site não perde o index.html');
+  const event = ctx.onboarding.fetchImpl.calls.find(c => c.url.endsWith('/events')).body;
+  assert.deepEqual(event.files.map(f => f.kind).sort(), ['logo_branco_png', 'logo_png', 'logo_svg']);
+  assert.equal(event.site.pubUrl, 'https://torres-wealth.vercel.app');
+});
+
+test('Ajuste do site: republica o site com a logo que já existe', async () => {
+  const ctx = await publish({ partner: adjustment({ site: 'Trocar o título' }, ['site_html']), sources: only('site_html'), unchanged: only('logo_svg') });
+  await ctx.run();
+  assert.deepEqual(ctx.vercel.fetchImpl.calls[0].body.files.map(f => f.file), ['index.html', 'logo.svg']);
+});
+
+test('Ajuste da logo sem o código do site neste navegador: para ANTES de publicar qualquer coisa', async () => {
+  const ctx = await publish({ partner: adjustment({ logo: 'Mais sóbria' }, ['logo_png', 'logo_branco_png']), sources: only('logo_svg', 'logo_png', 'logo_branco_png') });
+  await assert.rejects(ctx.run(), e => e.step === 'vercel' && /refaça a etapa Site/.test(e.userMessage));
+  assert.deepEqual(ctx.order, [], 'nem GitHub, nem Vercel, nem onboarding');
+});
+
+test('Ajuste que ainda deixa arquivo pedido de fora é barrado como qualquer entrega incompleta', async () => {
+  const ctx = await publish({ partner: adjustment({ logo: 'Mais sóbria' }, ['logo_png', 'logo_branco_png']), sources: only('logo_png') });
+  await assert.rejects(ctx.run(), e => /faltam arquivos obrigatórios/.test(e.message));
+  assert.deepEqual(ctx.order, []);
+});
+
+test('Sem itens no ajuste (pedido geral) tudo continua sendo refeito e publicado', async () => {
+  const ctx = await publish({ partner: partner({ versaoAtual: 1, ajusteItens: {} }) });
+  await ctx.run();
+  assert.deepEqual(ctx.order, ['github', 'vercel', 'onboarding']);
+});

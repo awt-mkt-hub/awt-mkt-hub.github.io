@@ -211,8 +211,19 @@
     return collected;
   }
 
-  async function publishOffice({ partner, sources, archive = {}, checklist, notes, client, github, vercel, toPng, onProgress = () => {} }) {
+  /**
+   * `partner.ajusteItens` (ajuste pedido item a item): `sources` traz só o que foi refeito e o servidor mantém o resto da versão anterior.
+   * O site, porém, é um deploy inteiro: se a logo ou o site mudou, o Vercel recebe os dois, e o que não mudou vem de `unchanged`
+   * ({ kind: () => Promise<Blob> }, do que o painel já tem). Sem mudar nenhum dos dois, não há deploy: o site no ar segue o mesmo.
+   */
+  async function publishOffice({ partner, sources, unchanged = {}, archive = {}, checklist, notes, client, github, vercel, toPng, onProgress = () => {} }) {
     Brand.assertComplete(partner, Object.keys(sources));
+    const partial = Object.keys(partner.ajusteItens || {}).length > 0;
+    const redeploy = !partner.keptSiteUrl && (!partial || VERCEL_KINDS.some(kind => kind in sources));
+    const siteKinds = Object.fromEntries(VERCEL_KINDS.filter(kind => kind in sources || kind in unchanged).map(kind => [kind, sources[kind] || unchanged[kind]]));
+    if (redeploy && !siteKinds.site_html) {
+      throw new PublishError('o código do site não está neste navegador: refaça a etapa Site para republicar', { step: 'vercel' });
+    }
     const folder = folderName(partner.nomeMarca, partner.slug);
     const stage = name => step => onProgress({ stage: name, ...step });
 
@@ -229,10 +240,16 @@
     }
 
     let site = { url: partner.keptSiteUrl, deploymentId: null };
-    if (!partner.keptSiteUrl) {
+    if (redeploy) {
       onProgress({ stage: 'vercel' });
-      const vercelFiles = Object.fromEntries(VERCEL_KINDS.filter(kind => files[kind]).map(kind => [REPO_FILES[kind], files[kind]]));
+      const vercelFiles = {};
+      for (const kind of VERCEL_KINDS) {
+        const blob = files[kind] || (unchanged[kind] && await unchanged[kind]());
+        if (blob) vercelFiles[REPO_FILES[kind]] = blob;
+      }
       site = await vercel.deploy({ name: partner.slug, files: vercelFiles });
+    } else if (!partner.keptSiteUrl) {
+      site = null; // ajuste que não mexe no site: o servidor segue com o endereço da versão anterior
     }
 
     let delivered = null;
@@ -240,7 +257,7 @@
       onProgress({ stage: 'onboarding' });
       delivered = await Brand.sendFiles({
         client, partner, files, checklist, notes, onProgress: stage('onboarding'),
-        site: { slug: partner.slug, pubUrl: site.url, ...(git && { githubUrl: git.folderUrl }) },
+        site: site ? { slug: partner.slug, pubUrl: site.url, ...(git && { githubUrl: git.folderUrl }) } : undefined,
       });
     }
     return { folder, git, site, delivered };

@@ -271,8 +271,9 @@
       step: truncate(step, MAX_STEP_LENGTH), error: truncate(error, MAX_ERROR_LENGTH),
     });
 
+    /** `site` pode faltar só num ajuste que não mexe no site: o servidor segue com o endereço da versão anterior. */
     const delivered = async (partnerId, { version, site, files, checklist = {}, notes = '' }) => {
-      if (!/^https:\/\/\S+$/.test(site.pubUrl || '')) throw new BrandConfigError('a URL do site precisa começar com https://');
+      if (site && !/^https:\/\/\S+$/.test(site.pubUrl || '')) throw new BrandConfigError('a URL do site precisa começar com https://');
       return sendEvent('brand.delivered', partnerId, { version, site, files, checklist, notes });
     };
 

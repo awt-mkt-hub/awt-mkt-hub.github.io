@@ -312,6 +312,8 @@ const S = {
   si: 0,
   status:      lsGet('awt_status', {}),
   fotoSrc: lsGet('awt_foto_src', {}), // { pid: impressão da foto original que gerou o resultado }
+  fran: lsGet('awt_fran', {}), // { 'pid_etapa': o que a revisão pediu para ajustar nessa etapa } — vira o texto do ajuste e do prompt da IA
+  adjApplied: lsGet('awt_adj_applied', {}), // { pid: ajusteEm } — cada pedido de ajuste reabre as etapas uma vez só
   chk: {}, // session-only: { pid: { ec1: true, ... } } — o checklist da entrega marcado pelo operador
   redo: {}, // session-only: { `${pid}_${etapa}`: true } — refazer mesmo o que o parceiro pediu para manter
   pub: {}, // session-only: { pid: { state: 'running'|'done'|'error', row, error, result } } — uma publicação por parceira
@@ -799,13 +801,34 @@ function rQueue() {
 }
 
 // ── WORKFLOW ──
+/** Novo pedido de ajuste da revisão: reabre SÓ as etapas pedidas, com o comentário de cada uma (que segue para o prompt da IA). O que
+ *  não foi pedido continua pronto. Uma vez por pedido (a fila volta a trazer o mesmo pedido a cada 2 min). */
+function applyAdjustment(p) {
+  if (!adjustmentRequested(p) || !p.ajusteEm || S.adjApplied[p.id] === p.ajusteEm) return;
+  S.adjApplied[p.id] = p.ajusteEm;
+  lsSet('awt_adj_applied', S.adjApplied);
+  delete S.pub[p.id]; // a publicação anterior (tela de "publicado") não vale para a nova entrega
+  delete S.chk[p.id];
+  Object.entries(p.ajusteItens || {}).forEach(([material, comment]) => {
+    const step = REDO_STEP[material];
+    if (!step) return;
+    S.fran[`${p.id}_${step}`] = comment;
+    sst(p.id, step, 'ajustes');
+  });
+  lsSet('awt_fran', S.fran);
+}
+
 /** O que a Fran pediu para ajustar, na tela inteira da parceira (antes só aparecia na etapa Publicar e cortado na fila). */
 function rAjusteBanner(p) {
   if (!adjustmentRequested(p)) return '';
+  const items = Object.entries(p.ajusteItens || {});
   return `<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:14px 18px;margin:0 0 18px;color:#92400E">
     <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔄 Ajuste pedido pela revisão</div>
-    <div style="font-size:13px;line-height:1.5;white-space:pre-wrap">${esc(p.ajusteComentario || 'Sem detalhes: veja com quem pediu.')}</div>
-    <div style="font-size:11px;margin-top:6px;opacity:.8">Refaça o que for preciso nas etapas e publique de novo: a entrega vai como nova versão.</div>
+    ${items.length
+      ? `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.5">${items.map(([material, comment]) => `<li><strong>${esc(REDO_LABEL[material] || material)}:</strong> <span style="white-space:pre-wrap">${esc(comment)}</span></li>`).join('')}</ul>
+         <div style="font-size:11px;margin-top:6px;opacity:.8">Refaça só estes itens (as outras etapas seguem como estão) e publique: a entrega vai como nova versão.</div>`
+      : `<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">${esc(p.ajusteComentario || 'Sem detalhes: veja com quem pediu.')}</div>
+         <div style="font-size:11px;margin-top:6px;opacity:.8">Refaça o que for preciso nas etapas e publique de novo: a entrega vai como nova versão.</div>`}
   </div>`;
 }
 
@@ -876,6 +899,10 @@ const STEP_OF_MATERIAL = { logo: 'logo', site: 'site', cartao: 'cartao', timbrad
 const MATERIAL_OF_STEP = Object.fromEntries(Object.entries(STEP_OF_MATERIAL).map(([material, step]) => [step, material]));
 const MATERIAL_LABEL = { logo: 'Logo', site: 'Site', cartao: 'Cartão de visita', timbrado: 'Papel timbrado' };
 const MATERIAL_KINDS = { logo: ['logo_svg', 'logo_png', 'logo_branco_png'], site: ['site_html'], cartao: ['cartao_pdf'], timbrado: ['timbrado_pdf'] };
+// Ajuste pedido pela revisão item a item: o que se pode mandar refazer (os materiais mais a foto) e onde cada um vive
+const REDO_STEP = { ...STEP_OF_MATERIAL, foto: 'fotoCorp' };
+const REDO_LABEL = { ...MATERIAL_LABEL, foto: 'Foto' };
+const REDO_KINDS = { ...MATERIAL_KINDS, foto: ['foto_png'] };
 const MATERIAL_ACTION = {
   manter:  { icon: '✅', text: 'O parceiro já tem e quer manter como está. Não refazer.',     bg: '#D1FAE5', fg: '#065F46' },
   ajustar: { icon: '✏️', text: 'O parceiro já tem e pediu ajustes. Parta do que ele enviou.', bg: '#FEF3C7', fg: '#92400E' },
@@ -1060,9 +1087,10 @@ function rGen(p, step, si, type) {
     const key = p.id + '_' + step.id;
     const imgStored = S.ajustesImg && S.ajustesImg[key];
     body = `<div>
+      ${S.fran[key] ? `<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:12px"><strong>Pedido da revisão:</strong> <span style="white-space:pre-wrap">${esc(S.fran[key])}</span></div>` : ''}
       <div style="font-size:14px;font-weight:600;margin-bottom:8px">✏️ Descreva o ajuste</div>
       <div style="font-size:12px;color:var(--txt-s);margin-bottom:12px">Você pode colar uma URL de referência — o conteúdo será buscado automaticamente e enviado ao Claude.</div>
-      <textarea id="ajustes-txt" placeholder="Ex: Quero algo mais moderno. Referência: https://exemplo.com" style="width:100%;min-height:100px;padding:12px 14px;border:1.5px solid var(--borda);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.6" oninput="checkUrlInAjuste(this)" onblur="this.style.borderColor='var(--borda)'">${(S.ajustesNote && S.ajustesNote[key]) || ''}</textarea>
+      <textarea id="ajustes-txt" placeholder="Ex: Quero algo mais moderno. Referência: https://exemplo.com" style="width:100%;min-height:100px;padding:12px 14px;border:1.5px solid var(--borda);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.6" oninput="checkUrlInAjuste(this)" onblur="this.style.borderColor='var(--borda)'">${esc(S.fran[key] || (S.ajustesNote && S.ajustesNote[key]) || '')}</textarea>
       <div id="url-indicator" style="display:none;margin-top:8px;padding:8px 12px;background:#EDE9F5;border-radius:6px;font-size:12px;color:var(--roxo)">
         🔗 URL detectada — será buscada antes de gerar
       </div>
@@ -1481,11 +1509,14 @@ document.addEventListener('click', function(e) {
     const note = txt ? txt.value.trim() : '';
     if (!S.ajustesNote) S.ajustesNote = {};
     if (note) S.ajustesNote[pid + '_' + sid] = note;
+    delete S.fran[pid + '_' + sid]; // o pedido da revisão já virou o texto do ajuste
+    lsSet('awt_fran', S.fran);
     // avança variante visual
     const k = pid + '_' + sid;
     S.iter[k] = (S.iter[k] || 0) + 1;
     sst(pid, sid, 'generating');
     render();
+    if (type === 'fotoCorp') { animateFotoCorp(pid, sid, note); return; } // a foto não passa pelo Claude: o ajuste vai no prompt do GPT
     // busca URLs do ajuste antes de gerar
     fetchUrlsFromNote(note).then(enriched => {
       if (enriched !== note) S.ajustesNote[pid + '_' + sid] = enriched;
@@ -2095,7 +2126,7 @@ function handleFotoCorpUpload(input, pid, sid) {
   reader.readAsDataURL(file);
 }
 
-async function animateFotoCorp(pid, sid) {
+async function animateFotoCorp(pid, sid, ajuste = '') {
   const p = gp(pid);
   if (!p) return;
   const rKey = pid + '_' + sid;
@@ -2118,7 +2149,7 @@ async function animateFotoCorp(pid, sid) {
     const form = new FormData();
     form.append('model', FOTO_CORP_MODEL);
     form.append('image', file);
-    form.append('prompt', FOTO_CORP_PROMPT);
+    form.append('prompt', ajuste ? `${FOTO_CORP_PROMPT}\n\nAJUSTE PEDIDO (aplique obrigatoriamente): ${ajuste}` : FOTO_CORP_PROMPT);
     form.append('n', '1');
     form.append('size', '1024x1024');
     const apiRes = await fetch('https://api.openai.com/v1/images/edits', {
@@ -2468,6 +2499,8 @@ async function loadQueue() {
         materiais: ap.materiais || null,              // o que o parceiro já tem: { logo|site|cartao|timbrado: { acao, obs, url, arquivo } }
         fotoTratamento: ap.fotoTratamento || null,    // ia | original (a foto em si vem em fotoUrl)
         ajusteComentario: ap.ajusteComentario || null,
+        ajusteItens: ap.ajusteItens || {},            // { material: o que ajustar }; vazio = pedido geral (refaz tudo)
+        ajusteEm: ap.ajusteEm || null,                // identifica este pedido
         _fromApi: true,
       };
       // Pré-carrega logo se vier da API
@@ -2501,6 +2534,7 @@ async function loadQueue() {
       const idx = PARTNERS.findIndex(x => x.partnerId === mapped.partnerId || x.slug === mapped.slug);
       if (idx >= 0) { mapped.id = PARTNERS[idx].id; PARTNERS[idx] = mapped; }
       else PARTNERS.push(mapped);
+      applyAdjustment(mapped);
     });
     render();
   } catch(e) {
@@ -2523,7 +2557,16 @@ const PUBLISH_SOURCES = [
 const PUBLISH_CHECKLIST = { nome_marca: 'ec1', cor_primaria: 'ec2', whatsapp: 'ec3', disclaimer: 'ec4', sem_palavras_proibidas: 'ec5', especialidades: 'ec6' };
 
 const publishResult = (p, source) => S.results[`${p.id}_${source.result}`];
-const publishFiles = p => PUBLISH_SOURCES.filter(source => publishResult(p, source) && !kindKept(p, source.kind)); // o que o parceiro manteve não se publica
+/** Com ajuste item a item, os tipos de arquivo que a revisão mandou refazer; sem itens (pedido geral), null: tudo. */
+const redoKinds = p => {
+  const items = Object.keys(p.ajusteItens || {});
+  return adjustmentRequested(p) && items.length ? new Set(items.flatMap(material => REDO_KINDS[material] || [])) : null;
+};
+const publishFiles = p => PUBLISH_SOURCES.filter(source => publishResult(p, source) && !kindKept(p, source.kind) && (redoKinds(p)?.has(source.kind) ?? true)); // o que o parceiro manteve ou a revisão não pediu não se publica
+/** O que o site precisa e não mudou neste ajuste: o Vercel republica o site inteiro, então entra de novo no deploy (não vai ao servidor). */
+const unchangedSiteFiles = p => Object.fromEntries(PUBLISH_SOURCES
+  .filter(source => ['site_html', 'logo_svg'].includes(source.kind) && publishResult(p, source) && !publishFiles(p).includes(source))
+  .map(source => [source.kind, async () => source.make(publishResult(p, source))]));
 /** O checklist sobrevive ao redesenho da tela (a fila atualiza sozinha a cada 2 min): o que o operador marcou fica no estado. */
 const chkAttr = (p, id) => (S.chk[p.id] && S.chk[p.id][id] ? ' checked' : '');
 document.addEventListener('change', e => {
@@ -2533,7 +2576,7 @@ const publishChecklist = () => Object.fromEntries(
   Object.entries(PUBLISH_CHECKLIST).map(([name, id]) => [name, !!document.getElementById(id)?.checked]));
 const publishPartner = p => ({
   partnerId: p.partnerId, slug: p.slug, nomeMarca: p.nomeMarca, servicos: p.ativos, versaoAtual: p.versaoAtual,
-  arquivosObrigatorios: p.arquivosObrigatorios,
+  arquivosObrigatorios: p.arquivosObrigatorios, ajusteItens: adjustmentRequested(p) ? p.ajusteItens : undefined,
   keptSiteUrl: materialKept(p, 'site') ? partnerMaterial(p, 'site').url : undefined, // site mantido: é o site público, sem deploy
 });
 
@@ -2589,6 +2632,7 @@ async function animatePublish(pid, checklist) {
     const result = await AwtPublish.publishOffice({
       partner: publishPartner(p),
       sources: Object.fromEntries(publishFiles(p).map(source => [source.kind, () => source.make(publishResult(p, source))])),
+      unchanged: unchangedSiteFiles(p),
       checklist,
       client: publishClient(p),
       archive: partnerArchive(p),
